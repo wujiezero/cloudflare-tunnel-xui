@@ -96,12 +96,8 @@
 
 建议给 API Token 至少授予以下账户级权限中的一组读写能力：
 
-- `Cloudflare Tunnel Read`
-- `Cloudflare Tunnel Write`
-- `Cloudflare One Connectors Read`
-- `Cloudflare One Connectors Write`
-- `Cloudflare One Connector: cloudflared Read`
-- `Cloudflare One Connector: cloudflared Write`
+- `读取, Cloudflare Tunnel:编辑, Cloudflare Tunnel:读取, 访问：服务令牌:读取, 访问：组织、标识提供程序和组:编辑, 帐户设置:读取, 访问：应用和策略:编辑`
+- `所有区域 - 区域:读取, DNS:读取, DNS:编辑`
 
 如果还希望页面读取 Token 自身的详细策略并提示“缺少什么权限”，还建议额外提供可读取 token 明细的权限，否则系统只能验证“能不能访问 Tunnel API”，无法完全枚举策略详情。
 
@@ -143,12 +139,12 @@ npm start
 
 默认访问地址：
 
-- [http://localhost:3000](http://localhost:3000)
+- [http://localhost:8866](http://localhost:8866)
 
 也可以临时覆盖监听地址：
 
 ```bash
-HOST=0.0.0.0 PORT=3999 npm start
+HOST=0.0.0.0 PORT=8866 npm start
 ```
 
 停止说明：
