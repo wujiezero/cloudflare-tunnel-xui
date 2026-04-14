@@ -1,0 +1,18 @@
+services:
+  cloudflare-tunnel-xui:
+    container_name: cloudflare-tunnel-xui
+    build:
+      context: .
+      dockerfile: Dockerfile
+      no_cache: true
+    # image: cloudflare-tunnel-xui:latest
+    restart: unless-stopped
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8866
+    ports:
+      - "8866:8866"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./bin:/app/bin
+      - ./.cloudflared:/app/.cloudflared

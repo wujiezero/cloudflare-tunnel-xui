@@ -1,0 +1,16 @@
+node_modules/
+.DS_Store
+.cloudflared.pid
+.cloudflared.log
+.cloudflared.token
+.cloudflared-config.yml
+.tmp-cloudflared-arm64/
+.tmp-cloudflared-amd64/
+cloudflared
+bin/cloudflared
+cloudflared-darwin-arm64
+cloudflared-darwin-amd64
+cloudflared-darwin-arm64.tgz
+cloudflared-darwin-amd64.tgz
+bin/*.tgz
+config.json

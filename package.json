@@ -1,0 +1,26 @@
+{
+  "name": "cloudflare-tunnel-xui",
+  "version": "1.0.0",
+  "description": "Cloudflare Tunnel management console with encrypted configuration storage and cloudflared integration.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "NODE_ENV=development node src/server.js"
+  },
+  "keywords": [
+    "cloudflare",
+    "tunnel",
+    "express",
+    "dashboard"
+  ],
+  "author": "Jason <wujiezero@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@vitejs/plugin-vue": "^6.0.5",
+    "element-plus": "^2.13.6",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "vite": "^8.0.3",
+    "vue": "^3.5.31"
+  }
+}
