@@ -1,0 +1,26 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8866
+  },
+  "auth": {
+    "username": "admin",
+    "passwordSalt": "b1fbb4a8b2d34ce7a3a67a92c1d4ef7d",
+    "passwordHash": "64c4a57ff3cfd21e09bf898f1a88d3a914bf213de00b4d37b9e49d0b2b57d209",
+    "sessionSecret": "replace-this-session-secret-with-a-random-long-string"
+  },
+  "crypto": {
+    "secretKey": "replace-with-a-random-encryption-key"
+  },
+  "cloudflare": {
+    "encryptedAccountId": "",
+    "encryptedApiToken": ""
+  },
+  "cloudflared": {
+    "binaryPath": "./bin/cloudflared",
+    "metricsHost": "127.0.0.1",
+    "logLevel": "info",
+    "protocol": "http2",
+    "extraArgs": []
+  }
+}
