@@ -34,6 +34,8 @@
           accountId: "",
           apiToken: ""
         },
+        maskedApiToken: "",
+        pollFailCount: 0,
         passwordForm: {
           currentPassword: "",
           newPassword: "",
@@ -332,7 +334,8 @@
           return [...previousLines];
         }
 
-        const maxOverlap = Math.min(previousLines.length, nextLines.length);
+        // Cap overlap search to 200 lines to keep complexity O(k*n) not O(n²)
+        const maxOverlap = Math.min(previousLines.length, nextLines.length, 200);
         for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
           let matches = true;
           for (let index = 0; index < overlap; index += 1) {
@@ -684,8 +687,8 @@
         if (Number.isNaN(date.getTime())) {
           return String(value);
         }
+        // Use browser locale timezone — no hardcoded region
         return new Intl.DateTimeFormat("zh-CN", {
-          timeZone: "Asia/Shanghai",
           year: "numeric",
           month: "2-digit",
           day: "2-digit",
@@ -722,9 +725,12 @@
       async loadSettings() {
         const payload = await this.api("/api/settings");
         this.settingsForm.accountId = payload.config.cloudflare.accountId || "";
-        this.settingsForm.apiToken = payload.config.cloudflare.tokenConfigured
-          ? payload.config.cloudflare.maskedToken || "********"
+        // Derive the masked token from server response; never hardcode "********"
+        const masked = payload.config.cloudflare.tokenConfigured
+          ? (payload.config.cloudflare.maskedToken || "••••••••")
           : "";
+        this.maskedApiToken = masked;
+        this.settingsForm.apiToken = masked;
         this.cloudflared = payload.cloudflared;
         this.ensureSelectedProcess();
       },
@@ -747,11 +753,18 @@
 
         try {
           this.cloudflared = await this.api("/api/cloudflared/status");
+          this.pollFailCount = 0;
           this.ensureSelectedProcess();
           if (this.runtimeLogVisible && this.selectedRuntimeTunnelId) {
             this.refreshCurrentRuntimeViewer({ silent: true });
           }
-        } catch (_error) {}
+        } catch (_error) {
+          this.pollFailCount += 1;
+          // Surface a warning after 3 consecutive silent failures
+          if (this.pollFailCount === 3) {
+            this.notify("状态轮询连续失败，请检查服务连接是否正常", "warning");
+          }
+        }
       },
       async handleLogin() {
         try {
@@ -782,8 +795,9 @@
       async saveSettings() {
         try {
           await this.withGlobalLoading(async () => {
+            // Empty string signals "keep existing token"; only send if user changed it
             const apiToken =
-              this.settingsForm.apiToken === "********" ? "" : this.settingsForm.apiToken;
+              this.settingsForm.apiToken === this.maskedApiToken ? "" : this.settingsForm.apiToken;
             await this.api("/api/settings/cloudflare", {
               method: "POST",
               body: JSON.stringify({
@@ -806,7 +820,7 @@
         try {
           const payload = await this.withGlobalLoading(async () => {
             const apiToken =
-              this.settingsForm.apiToken === "********" ? "" : this.settingsForm.apiToken;
+              this.settingsForm.apiToken === this.maskedApiToken ? "" : this.settingsForm.apiToken;
             return this.api("/api/settings/cloudflare/test", {
               method: "POST",
               body: JSON.stringify({
@@ -1496,11 +1510,27 @@
     },
     mounted() {
       this.bootstrap();
+      // Pause polling while tab is hidden; resume + refresh immediately on focus
+      this._onVisibilityChange = () => {
+        if (document.hidden) {
+          if (this.statusPollTimer) {
+            clearInterval(this.statusPollTimer);
+            this.statusPollTimer = null;
+          }
+        } else if (this.authenticated) {
+          this.refreshRuntimeStatus();
+          if (!this.statusPollTimer) {
+            this.statusPollTimer = setInterval(() => this.refreshRuntimeStatus(), 5000);
+          }
+        }
+      };
+      document.addEventListener("visibilitychange", this._onVisibilityChange);
     },
     beforeUnmount() {
       if (this.statusPollTimer) {
         clearInterval(this.statusPollTimer);
       }
+      document.removeEventListener("visibilitychange", this._onVisibilityChange);
     },
     template: `
       <div class="liquid-shell">
