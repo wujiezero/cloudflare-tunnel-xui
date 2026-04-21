@@ -4,19 +4,19 @@
   const viewMeta = {
     home: {
       title: "首页",
-      description: "实时监控 Tunnel、路由映射与本机连接器状态"
+      description: ""
     },
     settings: {
       title: "Cloudflare 配置",
-      description: "配置 Cloudflare 凭据、核验权限并调整管理口令"
+      description: ""
     },
     tunnels: {
       title: "Tunnel 清单",
-      description: "维护 Tunnel 路由与连接器运行态"
+      description: ""
     },
     about: {
       title: "运行说明",
-      description: "架构说明、运维建议与使用顺序"
+      description: ""
     }
   };
 
@@ -26,6 +26,7 @@
         authenticated: false,
         user: "",
         currentView: "home",
+        viewTransitionEnabled: true,
         loginForm: {
           username: "",
           password: ""
@@ -45,7 +46,12 @@
           name: "",
           tunnelSecret: ""
         },
+        tunnelSearch: "",
+        tunnelSort: "name",
+        tunnelSortOrder: "asc",
         tunnels: [],
+        tunnelsLoading: false,
+        settingsLoading: false,
         cloudflared: {
           binaryPath: "",
           binaryExists: false,
@@ -73,7 +79,11 @@
         loadingCount: 0,
         loadingInstance: null,
         createTunnelVisible: false,
-        csrfToken: ""
+        csrfToken: "",
+        lastRuntimeRefreshAt: null,
+        globalLoadingVisible: false,
+        globalLoadingText: "处理中...",
+        globalLoadingShowTimer: null
       };
     },
     computed: {
@@ -135,6 +145,45 @@
       },
       tunnelCount() {
         return this.tunnels.length;
+      },
+      filteredTunnels() {
+        const keyword = String(this.tunnelSearch || "").trim().toLowerCase();
+        const items = keyword
+          ? this.tunnels.filter((tunnel) => {
+              const haystack = `${tunnel.name || ""} ${tunnel.id || ""}`.toLowerCase();
+              return haystack.includes(keyword);
+            })
+          : [...this.tunnels];
+
+        const orderFactor = this.tunnelSortOrder === "desc" ? -1 : 1;
+        const safeNumber = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+        const compareText = (a, b) => String(a || "").localeCompare(String(b || ""), "zh-CN");
+
+        items.sort((left, right) => {
+          switch (this.tunnelSort) {
+            case "createdAt":
+              return (
+                (new Date(left.createdAt || 0).getTime() - new Date(right.createdAt || 0).getTime()) *
+                orderFactor
+              );
+            case "connections":
+              return (safeNumber(left.connections) - safeNumber(right.connections)) * orderFactor;
+            case "mappings":
+              return (
+                (safeNumber(left.configuration?.mappings?.length) -
+                  safeNumber(right.configuration?.mappings?.length)) *
+                orderFactor
+              );
+            case "name":
+            default:
+              return compareText(left.name, right.name) * orderFactor;
+          }
+        });
+
+        return items;
+      },
+      filteredTunnelCount() {
+        return this.filteredTunnels.length;
       },
       mappingCount() {
         return this.tunnels.reduce(
@@ -365,19 +414,24 @@
       },
       openGlobalLoading(text = "处理中...") {
         this.loadingCount += 1;
-        if (!this.loadingInstance) {
-          this.loadingInstance = ElementPlus.ElLoading.service({
-            lock: true,
-            text,
-            background: "rgba(236, 244, 255, 0.36)"
-          });
+        this.globalLoadingText = text;
+
+        // Delay showing the overlay to avoid flicker for fast requests.
+        if (!this.globalLoadingVisible && !this.globalLoadingShowTimer) {
+          this.globalLoadingShowTimer = setTimeout(() => {
+            this.globalLoadingVisible = this.loadingCount > 0;
+            this.globalLoadingShowTimer = null;
+          }, 160);
         }
       },
       closeGlobalLoading() {
         this.loadingCount = Math.max(0, this.loadingCount - 1);
-        if (this.loadingCount === 0 && this.loadingInstance) {
-          this.loadingInstance.close();
-          this.loadingInstance = null;
+        if (this.loadingCount === 0) {
+          if (this.globalLoadingShowTimer) {
+            clearTimeout(this.globalLoadingShowTimer);
+            this.globalLoadingShowTimer = null;
+          }
+          this.globalLoadingVisible = false;
         }
       },
       async withGlobalLoading(action, text) {
@@ -612,6 +666,13 @@
       },
       switchView(view) {
         this.currentView = view;
+        // Close transient popups when switching pages to avoid "lost" modals.
+        this.tunnelEditorVisible = false;
+        this.runtimeLogVisible = false;
+        this.createTunnelVisible = false;
+      },
+      toggleTunnelSortOrder() {
+        this.tunnelSortOrder = this.tunnelSortOrder === "asc" ? "desc" : "asc";
       },
       getTunnelStatusLabel(tunnel) {
         if (tunnel.connections > 0) {
@@ -648,9 +709,7 @@
         return !this.isTunnelRunning(tunnel.id) && Number(tunnel.connections || 0) === 0;
       },
       canOpenTunnelLogs(tunnelId) {
-        return this.cloudflared.processes.some(
-          (item) => item.tunnelId === tunnelId && item.running
-        );
+        return this.cloudflared.processes.some((item) => item.tunnelId === tunnelId);
       },
       canDeleteTunnel(tunnel) {
         return !this.isTunnelRunning(tunnel.id) && Number(tunnel.connections || 0) === 0;
@@ -715,7 +774,10 @@
         }
       },
       async hydrateDashboard() {
-        await Promise.all([this.loadSettings(), this.loadTunnels(), this.refreshRuntimeStatus()]);
+        await this.withGlobalLoading(
+          () => Promise.all([this.loadSettings(), this.loadTunnels(), this.refreshRuntimeStatus()]),
+          "正在加载控制台..."
+        );
         if (!this.statusPollTimer) {
           this.statusPollTimer = setInterval(() => {
             this.refreshRuntimeStatus();
@@ -723,20 +785,30 @@
         }
       },
       async loadSettings() {
-        const payload = await this.api("/api/settings");
-        this.settingsForm.accountId = payload.config.cloudflare.accountId || "";
-        // Derive the masked token from server response; never hardcode "********"
-        const masked = payload.config.cloudflare.tokenConfigured
-          ? (payload.config.cloudflare.maskedToken || "••••••••")
-          : "";
-        this.maskedApiToken = masked;
-        this.settingsForm.apiToken = masked;
-        this.cloudflared = payload.cloudflared;
-        this.ensureSelectedProcess();
+        this.settingsLoading = true;
+        try {
+          const payload = await this.api("/api/settings");
+          this.settingsForm.accountId = payload.config.cloudflare.accountId || "";
+          // Derive the masked token from server response; never hardcode "********"
+          const masked = payload.config.cloudflare.tokenConfigured
+            ? (payload.config.cloudflare.maskedToken || "••••••••")
+            : "";
+          this.maskedApiToken = masked;
+          this.settingsForm.apiToken = masked;
+          this.cloudflared = payload.cloudflared;
+          this.ensureSelectedProcess();
+        } finally {
+          this.settingsLoading = false;
+        }
       },
       async loadTunnels() {
-        const payload = await this.api("/api/tunnels");
-        this.tunnels = (payload.items || []).map((item) => this.ensureTunnelUi(item));
+        this.tunnelsLoading = true;
+        try {
+          const payload = await this.api("/api/tunnels");
+          this.tunnels = (payload.items || []).map((item) => this.ensureTunnelUi(item));
+        } finally {
+          this.tunnelsLoading = false;
+        }
       },
       async reloadTunnelsManually() {
         try {
@@ -753,6 +825,7 @@
 
         try {
           this.cloudflared = await this.api("/api/cloudflared/status");
+          this.lastRuntimeRefreshAt = new Date().toISOString();
           this.pollFailCount = 0;
           this.ensureSelectedProcess();
           if (this.runtimeLogVisible && this.selectedRuntimeTunnelId) {
@@ -1542,24 +1615,24 @@
                 <div class="brand-orb">CF</div>
                 <div>
                   <h1>Cloudflare Tunnel XUI</h1>
-                  <p>面向单机运维场景的 Tunnel 控制面，统一管理凭据、路由、DNS 发布与本地连接器生命周期。</p>
+                  <p>本地 Tunnel 控制台</p>
                 </div>
               </div>
               <div class="login-highlights">
                 <article class="login-highlight">
                   <span>01</span>
                   <strong>加密配置存储</strong>
-                  <p>敏感配置保存在本地，适合把控制面部署在自己的主机上。</p>
+                  <p>凭据本地加密保存</p>
                 </article>
                 <article class="login-highlight">
                   <span>02</span>
                   <strong>路由与 DNS 同屏协同</strong>
-                  <p>创建 Tunnel、维护 hostname、同步 CNAME 与探测源站在同一套流程里完成。</p>
+                  <p>路由与 DNS 一体化</p>
                 </article>
                 <article class="login-highlight">
                   <span>03</span>
                   <strong>运行态可视化</strong>
-                  <p>把 Cloudflare 侧连接状态和本机 cloudflared 进程状态分开展示，排障更直接。</p>
+                  <p>日志与 metrics 可查</p>
                 </article>
               </div>
             </div>
@@ -1567,7 +1640,6 @@
             <el-card class="glass-card login-card">
               <div class="login-card-head">
                 <span class="permission-title">登录控制台</span>
-                <p>输入本地管理账号后进入 Tunnel 控制面。</p>
               </div>
               <el-form class="glass-form element-form" label-position="top">
                 <el-form-item label="用户名">
@@ -1591,7 +1663,6 @@
               <div>
                 <span class="sidebar-eyebrow">CONTROL PLANE</span>
                 <strong>Cloudflare Tunnel</strong>
-                <span>Edge routing and local connector workspace</span>
               </div>
             </div>
 
@@ -1609,18 +1680,7 @@
               </el-button>
             </div>
 
-            <el-card class="glass-card sidebar-status">
-              <div class="sidebar-status-grid">
-                <div class="sidebar-status-item">
-                  <span>当前账号</span>
-                  <strong>{{ user }}</strong>
-                </div>
-                <div class="sidebar-status-item">
-                  <span>自动刷新</span>
-                  <strong>{{ runtimePollingLabel }}</strong>
-                </div>
-              </div>
-              <div class="sidebar-runtime">{{ runtimeBadgeLabel }}</div>
+            <el-card class="glass-card sidebar-status sidebar-logout">
               <el-button class="glass-btn wide-action" @click="handleLogout">退出登录</el-button>
             </el-card>
           </aside>
@@ -1630,7 +1690,6 @@
               <div class="topbar-copy">
                 <span class="page-kicker">EDGE OPERATIONS</span>
                 <h2>{{ pageMeta.title }}</h2>
-                <p>{{ pageMeta.description }}</p>
               </div>
               <div class="topbar-meta">
                 <div class="tag-row">
@@ -1640,51 +1699,59 @@
                     {{ credentialsConfigured ? '凭据已配置' : '待配置凭据' }}
                   </el-tag>
                 </div>
-                <p class="topbar-note">本机控制面 · {{ runtimePollingLabel }}</p>
               </div>
             </header>
 
-            <section v-if="currentView === 'home'" class="page-grid home-page">
-              <div class="overview-grid single-wide">
-                <el-card class="glass-card compact-card tunnel-list-card" header="Tunnel 路由清单">
-                  <div class="home-tunnel-stack">
-                    <div v-if="!tunnels.length" class="empty-line">还没有可展示的 Tunnel。</div>
-                    <div v-for="tunnel in tunnels.slice(0, 6)" :key="tunnel.id" class="home-tunnel-card">
-                      <div class="home-tunnel-head">
-                        <div>
-                          <strong>{{ tunnel.name }}</strong>
-                          <p>{{ tunnel.connections || 0 }} 条连接</p>
+            <transition :name="viewTransitionEnabled ? 'view-fade' : ''" mode="out-in">
+              <div class="page-wrapper" :key="currentView">
+                <section v-if="currentView === 'home'" class="page-grid home-page">
+                  <div class="overview-grid single-wide">
+                    <el-card class="glass-card compact-card tunnel-list-card" header="Tunnel 路由清单">
+                      <transition-group tag="div" name="list" class="home-tunnel-stack">
+                        <div v-if="tunnelsLoading" key="loading" class="skeleton-stack">
+                          <div v-for="n in 3" :key="'home-skeleton-' + n" class="skeleton-card"></div>
                         </div>
-                        <div class="tag-row">
-                          <el-tag class="glass-tag" :type="getTunnelStatusType(tunnel)">{{ getTunnelStatusLabel(tunnel) }}</el-tag>
-                          <el-tag class="glass-tag" :class="isTunnelRunning(tunnel.id) ? 'success' : 'muted'">
-                            {{ isTunnelRunning(tunnel.id) ? '本机运行中' : '未在本机运行' }}
-                          </el-tag>
-                        </div>
-                      </div>
-                      <div class="mapping-preview-list">
-                        <div
-                          v-for="(mapping, index) in (tunnel.configuration?.mappings || []).slice(0, 4)"
-                          :key="index"
-                          class="mapping-preview-row"
-                        >
-                          <span>{{ mapping.hostname || '未配置域名' }}</span>
-                          <span class="arrow">→</span>
-                          <span>{{ mapping.service || '未配置源站' }}</span>
-                        </div>
-                        <div v-if="!(tunnel.configuration?.mappings || []).length" class="empty-line">暂无路由</div>
-                        <div v-else-if="(tunnel.configuration?.mappings || []).length > 4" class="empty-line small-empty">仅展示前 4 条路由。</div>
-                      </div>
-                    </div>
-                    <div v-if="tunnels.length > 6" class="empty-line small-empty">仅展示前 6 个 Tunnel。</div>
+                        <div v-else-if="!tunnels.length" key="empty" class="empty-line">还没有可展示的 Tunnel。</div>
+                        <template v-else>
+                          <div v-for="tunnel in tunnels.slice(0, 6)" :key="tunnel.id" class="home-tunnel-card">
+                            <div class="home-tunnel-head">
+                              <div>
+                                <strong>{{ tunnel.name }}</strong>
+                                <p>{{ tunnel.connections || 0 }} 条连接</p>
+                              </div>
+                              <div class="tag-row">
+                                <el-tag class="glass-tag" :type="getTunnelStatusType(tunnel)">{{ getTunnelStatusLabel(tunnel) }}</el-tag>
+                                <el-tag class="glass-tag" :class="isTunnelRunning(tunnel.id) ? 'success' : 'muted'">
+                                  {{ isTunnelRunning(tunnel.id) ? '本机运行中' : '未在本机运行' }}
+                                </el-tag>
+                              </div>
+                            </div>
+                            <div class="mapping-preview-list">
+                              <div
+                                v-for="(mapping, index) in (tunnel.configuration?.mappings || []).slice(0, 4)"
+                                :key="index"
+                                class="mapping-preview-row"
+                              >
+                                <span>{{ mapping.hostname || '未配置域名' }}</span>
+                                <span class="arrow">→</span>
+                                <span>{{ mapping.service || '未配置源站' }}</span>
+                              </div>
+                              <div v-if="!(tunnel.configuration?.mappings || []).length" class="empty-line">暂无路由</div>
+                              <div v-else-if="(tunnel.configuration?.mappings || []).length > 4" class="empty-line small-empty">仅展示前 4 条路由。</div>
+                            </div>
+                          </div>
+                          <div v-if="tunnels.length > 6" key="home-more" class="empty-line small-empty">
+                            已有 {{ tunnels.length }} 个 Tunnel · <el-button link type="primary" @click="switchView('tunnels')">查看全部</el-button>
+                          </div>
+                        </template>
+                      </transition-group>
+                    </el-card>
                   </div>
-                </el-card>
-              </div>
-            </section>
+                </section>
 
-            <section v-else-if="currentView === 'settings'" class="page-grid settings-page">
-              <div class="settings-split-grid">
-                <el-card class="glass-card settings-card">
+                <section v-else-if="currentView === 'settings'" class="page-grid settings-page">
+                  <div class="settings-split-grid">
+                    <el-card class="glass-card settings-card">
                   <template #header>
                     <div class="card-head-row">
                       <span>Cloudflare 配置</span>
@@ -1746,7 +1813,7 @@
                             <span class="permission-title">缺少权限</span>
                             <div class="tag-row">
                               <el-tag v-for="item in missingPermissions" :key="item" class="glass-tag warn" type="warning">{{ item }}</el-tag>
-                              <span v-if="configTestData.permissions?.inspectable === false" class="empty-line small-empty">当前无法精确列出缺少项，请先补充 API Tokens Read</span>
+                              <span v-if="configTestData.permissions?.inspectable === false" class="empty-line small-empty">当前 API Token 无权读取自身权限明细（缺少或受限于 API Tokens Read），因此无法精确列出“缺少/已具备”的权限名；但 Tunnel/DNS 能力已通过真实接口探测。</span>
                               <span v-else-if="!missingPermissions.length" class="empty-line small-empty">未发现缺少权限</span>
                             </div>
                           </div>
@@ -1754,7 +1821,7 @@
                             <span class="permission-title">Tunnel 必需权限</span>
                             <div class="tag-row">
                               <el-tag v-for="item in tunnelMissingPermissions" :key="item" class="glass-tag warn" type="warning">{{ item }}</el-tag>
-                              <span v-if="tunnelMissingPermissions === null" class="empty-line small-empty">当前无法精确判断，请先补充 API Tokens Read</span>
+                              <span v-if="tunnelMissingPermissions === null" class="empty-line small-empty">权限明细不可读（API Tokens Read 受限），但 Tunnel 管理能力已通过探测。</span>
                               <span v-else-if="!tunnelMissingPermissions.length" class="empty-line small-empty">Tunnel 管理所需权限已具备</span>
                             </div>
                           </div>
@@ -1762,7 +1829,7 @@
                             <span class="permission-title">DNS 发布必需权限</span>
                             <div class="tag-row">
                               <el-tag v-for="item in dnsMissingPermissions" :key="item" class="glass-tag warn" type="warning">{{ item }}</el-tag>
-                              <span v-if="dnsMissingPermissions === null" class="empty-line small-empty">当前无法精确判断，请先补充 API Tokens Read</span>
+                              <span v-if="dnsMissingPermissions === null" class="empty-line small-empty">权限明细不可读（API Tokens Read 受限），但 DNS 自动发布能力已通过探测。</span>
                               <span v-else-if="!dnsMissingPermissions.length" class="empty-line small-empty">DNS 自动发布所需权限已具备</span>
                             </div>
                           </div>
@@ -1817,70 +1884,93 @@
                   <el-input type="textarea" class="glass-textarea" :rows="4" resize="none" readonly v-model="passwordResult" />
                 </el-card>
               </div>
-            </section>
+                </section>
 
-            <section v-else-if="currentView === 'tunnels'" class="page-grid tunnel-page">
-              <el-card class="glass-card tunnel-page-card">
-                <template #header>
-                  <div class="card-head-row">
-                    <span>Tunnel 清单</span>
-                    <el-space wrap>
-                      <el-button type="primary" class="glass-btn" @click="createTunnelVisible = true">创建 Tunnel</el-button>
-                      <el-button class="glass-btn" @click="reloadTunnelsManually">刷新状态</el-button>
-                    </el-space>
-                  </div>
-                </template>
-
-                <div class="tunnel-stack tunnel-scroll-area">
-                  <el-card v-for="tunnel in tunnels.slice(0, 8)" :key="tunnel.id" class="glass-card tunnel-card">
-                    <div class="tunnel-card-layout">
-                      <div class="tunnel-card-copy">
-                        <div class="tunnel-card-summary">
-                          <strong>{{ tunnel.name }}</strong>
-                          <p>
-                            {{ getTunnelStatusLabel(tunnel) }}
-                            <span v-if="isTunnelRunning(tunnel.id)"> · 本机运行中</span>
-                          </p>
-                        </div>
-                        <div class="tunnel-meta-line compact-tunnel-meta">
-                          <span>连接：{{ tunnel.connections || 0 }}</span>
-                          <span>路由：{{ tunnel.configuration?.mappings?.length || 0 }}</span>
-                          <span>创建于：{{ formatDateTime(tunnel.createdAt) }}</span>
-                        </div>
+                <section v-else-if="currentView === 'tunnels'" class="page-grid tunnel-page">
+                  <el-card class="glass-card tunnel-page-card">
+                    <template #header>
+                      <div class="card-head-row">
+                        <el-space wrap class="tunnel-toolbar">
+                          <el-input
+                            v-model="tunnelSearch"
+                            clearable
+                            class="glass-mini-input"
+                            placeholder="搜索 Tunnel 名称 / ID"
+                          />
+                          <el-select v-model="tunnelSort" class="glass-mini-select" placeholder="排序">
+                            <el-option label="按名称" value="name" />
+                            <el-option label="按创建时间" value="createdAt" />
+                            <el-option label="按连接数" value="connections" />
+                            <el-option label="按路由数" value="mappings" />
+                          </el-select>
+                          <el-button class="glass-btn" @click="toggleTunnelSortOrder">
+                            {{ tunnelSortOrder === 'asc' ? '升序' : '降序' }}
+                          </el-button>
+                          <el-tag v-if="tunnelSearch" class="glass-tag muted" type="info">
+                            {{ filteredTunnelCount }} / {{ tunnelCount }}
+                          </el-tag>
+                          <el-button type="primary" class="glass-btn" @click="createTunnelVisible = true">创建 Tunnel</el-button>
+                          <el-button class="glass-btn" @click="reloadTunnelsManually">刷新状态</el-button>
+                        </el-space>
                       </div>
-                      <el-space wrap class="tunnel-card-actions">
-                        <el-button
-                          type="primary"
-                          class="glass-btn"
-                          :disabled="!canStartTunnel(tunnel) && !canStopTunnel(tunnel)"
-                          @mouseenter="canStopTunnel(tunnel) ? hoveredStopTunnelId = tunnel.id : null"
-                          @mouseleave="hoveredStopTunnelId = null"
-                          @click="handleTunnelPrimaryAction(tunnel)"
-                        >
-                          {{ getTunnelPrimaryActionLabel(tunnel) }}
-                        </el-button>
-                        <el-button class="glass-btn" :disabled="!canOpenTunnelLogs(tunnel.id)" @click="openTunnelLogs(tunnel)">日志</el-button>
-                        <el-button class="glass-btn" @click="showTunnelDetail(tunnel)">配置</el-button>
-                        <el-button class="glass-btn danger-btn" :disabled="!canDeleteTunnel(tunnel)" @click="deleteTunnel(tunnel)">销毁</el-button>
-                      </el-space>
+                    </template>
+
+                    <div class="tunnel-stack tunnel-scroll-area">
+                      <div v-if="tunnelsLoading" class="skeleton-stack">
+                        <div v-for="n in 4" :key="'tunnel-skeleton-' + n" class="skeleton-card"></div>
+                      </div>
+                      <div v-else-if="!filteredTunnels.length" class="empty-line">
+                        {{ tunnelSearch ? '没有匹配的 Tunnel。' : '还没有可展示的 Tunnel。' }}
+                      </div>
+                      <transition-group v-else tag="div" name="list" class="tunnel-stack">
+                        <div v-for="tunnel in filteredTunnels" :key="tunnel.id" class="tunnel-item-card">
+                          <div class="tunnel-card-layout">
+                            <div class="tunnel-card-copy">
+                              <div class="tunnel-card-summary">
+                                <strong>{{ tunnel.name }}</strong>
+                                <p>
+                                  {{ getTunnelStatusLabel(tunnel) }}
+                                  <span v-if="isTunnelRunning(tunnel.id)"> · 本机运行中</span>
+                                </p>
+                              </div>
+                              <div class="tunnel-meta-line compact-tunnel-meta">
+                                <span>连接：{{ tunnel.connections || 0 }}</span>
+                                <span>路由：{{ tunnel.configuration?.mappings?.length || 0 }}</span>
+                                <span>创建于：{{ formatDateTime(tunnel.createdAt) }}</span>
+                              </div>
+                            </div>
+                            <el-space wrap class="tunnel-card-actions">
+                              <el-button
+                                type="primary"
+                                class="glass-btn"
+                                :disabled="!canStartTunnel(tunnel) && !canStopTunnel(tunnel)"
+                                @mouseenter="canStopTunnel(tunnel) ? hoveredStopTunnelId = tunnel.id : null"
+                                @mouseleave="hoveredStopTunnelId = null"
+                                @click="handleTunnelPrimaryAction(tunnel)"
+                              >
+                                {{ getTunnelPrimaryActionLabel(tunnel) }}
+                              </el-button>
+                              <el-button class="glass-btn" :disabled="!canOpenTunnelLogs(tunnel.id)" @click="openTunnelLogs(tunnel)">日志</el-button>
+                              <el-button class="glass-btn" @click="showTunnelDetail(tunnel)">配置</el-button>
+                              <el-button class="glass-btn danger-btn" :disabled="!canDeleteTunnel(tunnel)" @click="deleteTunnel(tunnel)">销毁</el-button>
+                            </el-space>
+                          </div>
+                        </div>
+                      </transition-group>
                     </div>
                   </el-card>
-                  <div v-if="tunnels.length > 8" class="empty-line small-empty">仅展示前 8 个 Tunnel。</div>
-                </div>
-              </el-card>
-            </section>
+                </section>
 
-            <section v-else class="page-grid">
-              <el-card class="glass-card" header="运行说明">
-                <div class="about-copy">
-                  <p>本控制台用于集中管理 Cloudflare Tunnel、路由映射与本机 cloudflared 进程状态，可在一个工作台内完成凭据配置、Tunnel 生命周期管理、路由维护和运行态观测。</p>
-                  <p>推荐流程：先在“Cloudflare 配置”录入 Account ID 与 API Token 并通过权限核验；再在“Tunnel 清单”确认已有 Tunnel 或创建新实例；最后进入“配置”维护 hostname 路由与源站信息，并按需启动连接器。</p>
-                  <p>同机多站点场景建议优先复用同一 Tunnel 追加多条路由；仅在权限隔离或生命周期隔离需求明确时再拆分多个 Tunnel。控制台会将 Cloudflare 侧连接状态与本机进程状态分层展示，便于快速判断问题属于云端还是本机。</p>
-                  <p>路由保存后若当前 Tunnel 由控制台托管运行，系统会提示是否立即重连以应用新配置。日志、metrics 与停止操作仅作用于本机托管进程。</p>
-                  <p>如果通过命令行启动控制台，退出服务时，控制台托管的 cloudflared 进程会同步停止并清理运行目录；其他独立运行的 cloudflared 进程仅被发现与展示，不会被接管或误删。</p>
-                </div>
-              </el-card>
-            </section>
+                <section v-else class="page-grid">
+                  <el-card class="glass-card" header="运行说明">
+                    <div class="about-copy">
+                      <p>使用顺序：配置 Token → 创建/选择 Tunnel → 配置路由 → 需要时连接并查看日志。</p>
+                      <p>页面托管的 cloudflared 支持启动/停止与日志/metrics；外部进程仅展示不接管。</p>
+                    </div>
+                  </el-card>
+                </section>
+              </div>
+            </transition>
           </main>
         </section>
 
@@ -2116,6 +2206,16 @@
             </el-space>
           </template>
         </el-dialog>
+
+        <transition name="overlay-fade">
+          <div v-if="globalLoadingVisible" class="global-overlay" aria-live="polite" aria-busy="true">
+            <div class="global-overlay-card">
+              <div class="overlay-spinner" aria-hidden="true"></div>
+              <div class="overlay-text">{{ globalLoadingText }}</div>
+              <div class="overlay-subtext">请稍候…</div>
+            </div>
+          </div>
+        </transition>
       </div>
     `
   });

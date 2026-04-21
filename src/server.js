@@ -244,6 +244,14 @@ async function bootstrap() {
           try {
             const runToken = await getTunnelToken(credentials.accountId, credentials.apiToken, tunnelId);
             const tunnel = await getTunnel(credentials.accountId, credentials.apiToken, tunnelId);
+            // If the tunnel is already connected elsewhere, do NOT start another local connector.
+            // This avoids duplicate "cloudflared tunnel run" processes fighting for the same tunnel.
+            if (Number(tunnel.connections || 0) > 0) {
+              console.log(
+                `Skip auto-restart for tunnel ${tunnelId}: already has ${tunnel.connections} active connection(s) on Cloudflare side.`
+              );
+              continue;
+            }
             const configuration = await getTunnelConfiguration(credentials.accountId, credentials.apiToken, tunnelId);
             await cloudflaredManager.start({
               tunnelId,
