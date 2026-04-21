@@ -935,7 +935,10 @@ async function testCloudflareCredentials({ accountId, apiToken }) {
   }
 
   return {
-    valid: issues.length === 0 && readyForTunnelManagement && readyForDnsPublish,
+    // "valid" should reflect real functional readiness.
+    // When API Tokens Read is missing, we may not be able to list granted/missing permission names,
+    // but Tunnel/DNS capabilities can still be verified via real API calls.
+    valid: verifyResult.status === "active" && readyForTunnelManagement && readyForDnsPublish,
     message,
     tokenId: verifyResult.id || "",
     tokenStatus: verifyResult.status || "",

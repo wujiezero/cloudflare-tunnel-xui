@@ -39,14 +39,16 @@
   --shadow:      0 20px 52px rgba(50, 80, 130, 0.16), 0 4px 16px rgba(50, 80, 130, 0.08);
   --shadow-soft: 0 10px 28px rgba(50, 80, 130, 0.10), 0 2px 8px rgba(50, 80, 130, 0.06);
   --shadow-card: 0 14px 32px rgba(50, 80, 130, 0.13), 0 2px 8px rgba(50, 80, 130, 0.07);
+  /* For large panels on the right side: softer + wider */
+  --shadow-panel: 0 22px 60px rgba(40, 70, 120, 0.10), 0 6px 18px rgba(40, 70, 120, 0.06);
 
   /* Inner highlights (inset) */
   --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.72);
   --inset-depth:     inset 0 -1px 0 rgba(92, 126, 178, 0.08);
 
   /* Blur / vibrancy */
-  --blur:       blur(24px) saturate(160%);
-  --blur-heavy: blur(32px) saturate(180%);
+  --blur:       blur(26px) saturate(175%);
+  --blur-heavy: blur(34px) saturate(190%);
 
   /* Grid overlay */
   --grid-line: rgba(42, 109, 246, 0.05);
@@ -87,6 +89,27 @@ body {
   position: relative;
 }
 
+/* Fine grain + vignette for a more "Liquid Glass" feel (pure CSS, no external asset) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255,255,255,0.38), transparent 55%),
+    radial-gradient(circle at 50% 110%, rgba(20,35,60,0.12), transparent 55%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(255,255,255,0.03) 0px,
+      rgba(255,255,255,0.03) 1px,
+      rgba(0,0,0,0.02) 2px,
+      rgba(0,0,0,0.02) 3px
+    );
+  mix-blend-mode: overlay;
+  opacity: 0.85;
+}
+
 button,
 input,
 textarea {
@@ -100,6 +123,30 @@ textarea {
   min-height: 100vh;
   position: relative;
   z-index: 1;
+}
+
+/* Soft floating blobs behind the UI */
+.liquid-shell::after {
+  content: "";
+  position: fixed;
+  inset: -20vh -20vw;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(circle at 18% 28%, rgba(42, 109, 246, 0.22), transparent 42%),
+    radial-gradient(circle at 78% 18%, rgba(120, 175, 255, 0.18), transparent 40%),
+    radial-gradient(circle at 28% 84%, rgba(60, 220, 190, 0.16), transparent 46%),
+    radial-gradient(circle at 82% 82%, rgba(180, 145, 255, 0.12), transparent 46%);
+  filter: blur(32px) saturate(120%);
+  transform: translate3d(0, 0, 0);
+  animation: liquid-float 18s ease-in-out infinite alternate;
+  opacity: 0.9;
+}
+
+@keyframes liquid-float {
+  0%   { transform: translate3d(-1.2%, -0.8%, 0) scale(1); }
+  50%  { transform: translate3d(1.0%,  0.6%, 0) scale(1.02); }
+  100% { transform: translate3d(-0.6%, 1.1%, 0) scale(1.01); }
 }
 
 /* Subtle grid */
@@ -145,10 +192,32 @@ textarea {
 .glass-topbar,
 .glass-card,
 .runtime-process-tile,
+.tunnel-item-card,
 .home-tunnel-card,
 .overview-item {
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
+}
+
+/* Specular highlight layer for main glass surfaces */
+.glass-sidebar::before,
+.glass-topbar::before,
+.glass-card.el-card::before,
+.runtime-process-tile::before,
+.tunnel-item-card::before,
+.home-tunnel-card::before,
+.overview-item::before,
+.glass-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 18% 6%, rgba(255,255,255,0.72), transparent 42%),
+    linear-gradient(135deg, rgba(255,255,255,0.18), transparent 55%);
+  opacity: 0.38;
+  mix-blend-mode: normal;
 }
 
 /* ─────────────────────────────────────────────
@@ -381,6 +450,11 @@ textarea {
 .sidebar-status-item span   { color: var(--muted); }
 .sidebar-status-item strong { color: var(--text); }
 
+.sidebar-logout .el-card__body {
+  padding: 10px;
+  display: grid;
+}
+
 /* ─────────────────────────────────────────────
    Dashboard main
    ───────────────────────────────────────────── */
@@ -448,6 +522,74 @@ textarea {
   height: 100%;
 }
 
+/* ─────────────────────────────────────────────
+   Page transitions / list transitions
+   ───────────────────────────────────────────── */
+.page-wrapper {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+}
+
+.view-fade-enter-active,
+.view-fade-leave-active {
+  transition: opacity 0.22s var(--ease-out), transform 0.22s var(--ease-out);
+}
+
+.view-fade-enter-from,
+.view-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: opacity 0.22s var(--ease-out), transform 0.22s var(--spring);
+}
+
+.list-enter-from,
+.list-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.list-move {
+  transition: transform 0.22s var(--spring);
+}
+
+.list-leave-active {
+  position: absolute;
+}
+
+/* ─────────────────────────────────────────────
+   Skeleton (loading shimmer)
+   ───────────────────────────────────────────── */
+.skeleton-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.skeleton-card {
+  height: 96px;
+  border-radius: 18px;
+  border: 1px solid rgba(92, 126, 178, 0.16);
+  border-top-color: rgba(255, 255, 255, 0.70);
+  background:
+    linear-gradient(110deg,
+      rgba(255,255,255,0.22) 8%,
+      rgba(255,255,255,0.44) 18%,
+      rgba(255,255,255,0.22) 33%
+    );
+  background-size: 240% 100%;
+  box-shadow: var(--shadow-soft), var(--inset-highlight);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 120% 0; }
+  100% { background-position: -120% 0; }
+}
+
 .page-grid > .el-row { margin-bottom: 0 !important; }
 
 .home-page {
@@ -475,10 +617,26 @@ textarea {
   border-top-color: var(--specular-soft);
   box-shadow: var(--shadow-card), var(--inset-highlight), var(--inset-depth);
   border-radius: 20px;
-  overflow: hidden;
   background-clip: padding-box;
   transition: box-shadow 0.22s var(--ease-out), transform 0.22s var(--ease-out);
 }
+
+.glass-card.el-card:hover {
+  box-shadow: var(--shadow), var(--inset-highlight);
+  transform: translateY(-1px);
+}
+
+/* Right pane cards: prevent "dirty" heavy shadow stacking */
+.dashboard-main .glass-topbar,
+.dashboard-main .glass-card.el-card {
+  box-shadow: var(--shadow-panel), var(--inset-highlight), var(--inset-depth);
+}
+
+.dashboard-main .glass-card.el-card:hover {
+  box-shadow: 0 26px 72px rgba(40, 70, 120, 0.12), 0 8px 22px rgba(40, 70, 120, 0.07), var(--inset-highlight);
+}
+
+/* Tunnel cards are now plain divs (tunnel-item-card), not ElCard. */
 
 .glass-card .el-card__header {
   min-height: 40px;
@@ -653,6 +811,35 @@ textarea {
     inset 0 2px 6px rgba(92, 126, 178, 0.06) !important;
   color: var(--text) !important;
   transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+
+/* Compact toolbar inputs (Tunnel list) */
+.glass-mini-input.el-input {
+  width: min(300px, 60vw);
+}
+
+.glass-mini-input .el-input__wrapper,
+.glass-mini-select .el-select__wrapper {
+  border-radius: 999px !important;
+  min-height: 34px !important;
+  background: rgba(255, 255, 255, 0.66) !important;
+  border: 1px solid rgba(92, 126, 178, 0.24) !important;
+}
+
+.glass-mini-select.el-select {
+  width: 160px;
+}
+
+.card-title-stack {
+  display: grid;
+  gap: 2px;
+  align-content: center;
+}
+
+.card-subtitle {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .glass-form .el-input__wrapper   { min-height: 40px; padding: 0 14px !important; }
@@ -962,7 +1149,6 @@ textarea {
   gap: 8px;
   padding: 12px;
   max-height: calc(100vh - 210px);
-  overflow: hidden;
 }
 
 /* ─────────────────────────────────────────────
@@ -1235,6 +1421,70 @@ textarea {
   flex-direction: column;
 }
 
+/* ─────────────────────────────────────────────
+   Global loading overlay (soft Liquid Glass)
+   ───────────────────────────────────────────── */
+.overlay-fade-enter-active,
+.overlay-fade-leave-active {
+  transition: opacity 0.22s var(--ease-out);
+}
+
+.overlay-fade-enter-from,
+.overlay-fade-leave-to {
+  opacity: 0;
+}
+
+.global-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: radial-gradient(circle at 50% 30%, rgba(255,255,255,0.22), rgba(220,235,255,0.10) 50%, rgba(220,235,255,0.06));
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+}
+
+.global-overlay-card {
+  width: min(520px, calc(100vw - 36px));
+  border-radius: 24px;
+  border: 1px solid rgba(92, 126, 178, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.78);
+  background: linear-gradient(160deg, rgba(255,255,255,0.80), rgba(245,250,255,0.52));
+  box-shadow: var(--shadow), var(--inset-highlight);
+  padding: 18px 18px 16px;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  text-align: center;
+}
+
+.overlay-spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: conic-gradient(from 180deg, rgba(42,109,246,0.95), rgba(120,175,255,0.35), rgba(42,109,246,0.95));
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 58%, #000 62%);
+  mask: radial-gradient(circle at 50% 50%, transparent 58%, #000 62%);
+  filter: drop-shadow(0 8px 16px rgba(42, 109, 246, 0.22));
+  animation: overlay-spin 0.9s linear infinite;
+}
+
+@keyframes overlay-spin {
+  to { transform: rotate(360deg); }
+}
+
+.overlay-text {
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.overlay-subtext {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
 .glass-dialog .el-dialog__header {
   padding: 20px 22px 10px;
   margin-right: 0;
@@ -1341,17 +1591,21 @@ textarea {
   width: 100%;
 }
 
-.tunnel-card > .el-card__body { padding: 0; }
-
-.tunnel-card {
-  border-left: 2px solid rgba(56, 189, 248, 0.32);
-  transition: transform 0.2s var(--spring), box-shadow 0.2s var(--ease-out), border-left-color 0.2s;
+/* Match the home page card look: clean glass plate + soft shadow (no grey base) */
+.tunnel-item-card {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid rgba(92, 126, 178, 0.18);
+  border-top-color: rgba(255, 255, 255, 0.78);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.76), rgba(247, 251, 255, 0.60));
+  box-shadow: var(--shadow-soft), var(--inset-highlight);
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out), border-color 0.2s;
 }
 
-.tunnel-card:hover {
-  transform: translateX(2px);
-  border-left-color: rgba(42, 109, 246, 0.50);
-  box-shadow: var(--shadow-card), var(--inset-highlight) !important;
+.tunnel-item-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(42, 109, 246, 0.22);
+  box-shadow: var(--shadow-card), var(--inset-highlight);
 }
 
 .tunnel-card-layout {
@@ -1414,7 +1668,6 @@ textarea {
 /* Tunnel scroll — FIXED: was overflow: hidden */
 .tunnel-scroll-area {
   overflow-y: auto;
-  overflow-x: hidden;
   padding-right: 2px;
   scrollbar-width: thin;
   scrollbar-color: rgba(92, 126, 178, 0.16) transparent;
