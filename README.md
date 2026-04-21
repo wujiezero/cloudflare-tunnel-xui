@@ -46,6 +46,7 @@
 ### `config.json`
 
 项目首次启动会自动补齐随机 `sessionSecret` 与 `secretKey`（如果你还保留了占位值）。
+如果 `config.json` 不存在，服务会自动基于 [config.example.json](./config.example.json) 初始化一份默认配置。
 
 仓库中提供的是 [config.example.json](./config.example.json)。实际运行时请复制为 `config.json` 并填写你自己的配置与密钥。
 
@@ -204,6 +205,18 @@ docker compose up -d --build
 - 默认显式指定容器 DNS 为 `1.1.1.1` / `1.0.0.1`，绕过部分宿主机环境下 Docker 内置 `127.0.0.11` 解析异常
 - 自动映射 `./config.json` 到容器内 `/app/config.json`
 - 自动映射 `./bin` 到容器内 `/app/bin`
+
+首次使用建议先准备好配置文件：
+
+```bash
+cp config.example.json config.json
+```
+
+补充说明：
+
+- 如果宿主机上的 `./config.json` 不存在，Docker 可能会先创建一个同名目录并挂载进去。
+- 当前版本会自动在这个目录里初始化 `config.json`，容器可以正常启动。
+- 如果你希望宿主机保持“单个配置文件”的结构，删掉误创建的 `config.json/` 目录后，重新执行一次 `cp config.example.json config.json` 再启动即可。
 
 如果当前网络环境不能直接访问 `1.1.1.1`，可以在启动前覆盖：
 

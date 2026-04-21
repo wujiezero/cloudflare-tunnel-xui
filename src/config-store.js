@@ -10,15 +10,73 @@ const {
   isEncryptedPayload
 } = require("./crypto-utils");
 
-const CONFIG_PATH = path.resolve(process.cwd(), "config.json");
+const CONFIG_PATH = path.resolve(process.cwd(), process.env.CONFIG_PATH || "config.json");
+const CONFIG_TEMPLATE_PATH = path.resolve(process.cwd(), "config.example.json");
+const SESSION_SECRET_PLACEHOLDER = "replace-this-session-secret-with-a-random-long-string";
+const SECRET_KEY_PLACEHOLDERS = new Set([
+  "replace-this-encryption-key-with-a-random-long-string",
+  "replace-with-a-random-encryption-key"
+]);
+
+let didWarnAboutDirectoryConfigPath = false;
+
+async function resolveConfigFilePath() {
+  const stat = await fs.stat(CONFIG_PATH).catch((error) => {
+    if (error.code === "ENOENT") {
+      return null;
+    }
+
+    throw error;
+  });
+
+  if (stat?.isDirectory()) {
+    const nestedConfigPath = path.join(CONFIG_PATH, "config.json");
+    if (!didWarnAboutDirectoryConfigPath) {
+      console.warn(
+        `[config-store] ${CONFIG_PATH} is a directory, using ${nestedConfigPath} as the config file path.`
+      );
+      didWarnAboutDirectoryConfigPath = true;
+    }
+    return nestedConfigPath;
+  }
+
+  return CONFIG_PATH;
+}
+
+async function loadTemplateConfig() {
+  const raw = await fs.readFile(CONFIG_TEMPLATE_PATH, "utf8");
+  return JSON.parse(raw);
+}
+
+async function ensureConfigFile() {
+  const configFilePath = await resolveConfigFilePath();
+  await fs.mkdir(path.dirname(configFilePath), { recursive: true });
+
+  const exists = await fs.access(configFilePath).then(() => true).catch((error) => {
+    if (error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  });
+
+  if (!exists) {
+    const template = await loadTemplateConfig();
+    await fs.writeFile(configFilePath, `${JSON.stringify(template, null, 2)}\n`, "utf8");
+  }
+
+  return configFilePath;
+}
 
 async function readConfig() {
-  const raw = await fs.readFile(CONFIG_PATH, "utf8");
+  const configFilePath = await ensureConfigFile();
+  const raw = await fs.readFile(configFilePath, "utf8");
   return JSON.parse(raw);
 }
 
 async function writeConfig(config) {
-  await fs.writeFile(CONFIG_PATH, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  const configFilePath = await ensureConfigFile();
+  await fs.writeFile(configFilePath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
 async function ensureConfig() {
@@ -26,14 +84,14 @@ async function ensureConfig() {
 
   if (
     !config.auth?.sessionSecret ||
-    config.auth.sessionSecret === "replace-this-session-secret-with-a-random-long-string"
+    config.auth.sessionSecret === SESSION_SECRET_PLACEHOLDER
   ) {
     config.auth.sessionSecret = crypto.randomBytes(32).toString("hex");
   }
 
   if (
     !config.crypto?.secretKey ||
-    config.crypto.secretKey === "replace-this-encryption-key-with-a-random-long-string"
+    SECRET_KEY_PLACEHOLDERS.has(config.crypto.secretKey)
   ) {
     config.crypto = config.crypto || {};
     config.crypto.secretKey = crypto.randomBytes(32).toString("hex");
