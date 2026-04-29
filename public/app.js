@@ -37,6 +37,9 @@
         },
         maskedApiToken: "",
         pollFailCount: 0,
+        importTunnelJson: "",
+        showImportDialog: false,
+        importResult: null,
         passwordForm: {
           currentPassword: "",
           newPassword: "",
@@ -80,10 +83,13 @@
         loadingInstance: null,
         createTunnelVisible: false,
         csrfToken: "",
+        tunnelSelection: [],
+        batchActionLoading: false,
         lastRuntimeRefreshAt: null,
         globalLoadingVisible: false,
         globalLoadingText: "处理中...",
-        globalLoadingShowTimer: null
+        globalLoadingShowTimer: null,
+        darkMode: false
       };
     },
     computed: {
@@ -185,6 +191,13 @@
       filteredTunnelCount() {
         return this.filteredTunnels.length;
       },
+      selectedTunnelCount() {
+        return this.tunnelSelection.length;
+      },
+      allFilteredSelected() {
+        return this.filteredTunnels.length > 0 &&
+          this.filteredTunnels.every(t => this.tunnelSelection.includes(t.id));
+      },
       mappingCount() {
         return this.tunnels.reduce(
           (count, tunnel) => count + (tunnel.configuration?.mappings?.length || 0),
@@ -263,6 +276,9 @@
       },
       runtimeViewerLabel() {
         return this.runtimeViewerMode === "metrics" ? "Metrics 追踪" : "Tunnel 日志";
+      },
+      parsedMetrics() {
+        return this.parseMetricsText(this.runtimeLogDisplay);
       }
     },
     watch: {
@@ -300,7 +316,9 @@
           : await response.text();
 
         if (!response.ok) {
-          throw new Error(payload?.message || `Request failed: ${response.status}`);
+          const err = new Error(payload?.message || `Request failed: ${response.status}`);
+          err.status = response.status;
+          throw err;
         }
 
         return payload;
@@ -311,6 +329,11 @@
           type,
           grouping: true
         });
+      },
+      toggleDarkMode() {
+        this.darkMode = !this.darkMode;
+        document.documentElement.setAttribute("data-theme", this.darkMode ? "dark" : "light");
+        try { localStorage.setItem("cf_tunnel_xui.theme", this.darkMode ? "dark" : "light"); } catch (_) {}
       },
       cleanupDialogArtifacts() {
         if (this.tunnelEditorVisible || this.runtimeLogVisible || this.createTunnelVisible) {
@@ -459,11 +482,7 @@
           }))
           .filter((mapping) =>
             mapping.hostname ||
-            mapping.service ||
-            mapping.path ||
-            mapping.originRequest.noTLSVerify ||
-            mapping.originRequest.disableChunkedEncoding ||
-            mapping.originRequest.http2Origin
+            mapping.service
           );
       },
       getMappingsSignature(mappings = []) {
@@ -697,6 +716,12 @@
           (item) => item.tunnelId === tunnelId && item.running
         );
       },
+      getTunnelUptime(tunnelId) {
+        const process = this.cloudflared.processes.find(
+          (item) => item.tunnelId === tunnelId && item.running
+        );
+        return process?.startedAt ? this.formatUptime(process.startedAt) : null;
+      },
       getTunnelProcess(tunnelId) {
         return this.cloudflared.processes.find(
           (item) => item.tunnelId === tunnelId && item.running
@@ -738,6 +763,29 @@
       getProcessSourceLabel(processInfo) {
         return processInfo.source === "managed" ? "页面托管" : "自动发现";
       },
+      formatUptime(startedAt) {
+        if (!startedAt) {
+          return "-";
+        }
+        const diffMs = Date.now() - new Date(startedAt).getTime();
+        if (diffMs < 0) {
+          return "-";
+        }
+        const seconds = Math.floor(diffMs / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+        if (days > 0) {
+          return `${days}d ${hours % 24}h ${minutes % 60}m`;
+        }
+        if (hours > 0) {
+          return `${hours}h ${minutes % 60}m`;
+        }
+        if (minutes > 0) {
+          return `${minutes}m ${seconds % 60}s`;
+        }
+        return `${seconds}s`;
+      },
       formatDateTime(value) {
         if (!value) {
           return "-";
@@ -769,6 +817,12 @@
           }
           this.setAuthenticated(true, me.user);
           await this.hydrateDashboard();
+          // Init theme
+          let savedTheme = null;
+          try { savedTheme = localStorage.getItem("cf_tunnel_xui.theme"); } catch (_) {}
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          this.darkMode = savedTheme === "dark" || (!savedTheme && prefersDark);
+          document.documentElement.setAttribute("data-theme", this.darkMode ? "dark" : "light");
         } catch (_error) {
           this.setAuthenticated(false);
         }
@@ -814,6 +868,62 @@
         try {
           await this.withGlobalLoading(() => this.loadTunnels(), "正在刷新 Tunnel 列表...");
           this.notify("Tunnel 列表已刷新", "info");
+        } catch (error) {
+          this.notify(error.message, "error");
+        }
+      },
+      async exportTunnels() {
+        try {
+          const blob = await this.withGlobalLoading(async () => {
+            const response = await fetch("/api/tunnels/export", {
+              headers: this.csrfToken ? { "X-CSRF-Token": "" } : {},
+              credentials: "same-origin"
+            });
+            if (!response.ok) {
+              const err = await response.json().catch(() => ({ message: "Export failed" }));
+              throw new Error(err.message);
+            }
+            return response.blob();
+          }, "正在导出...");
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "cloudflare-tunnels-export.json";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          this.notify("Tunnel 配置已导出");
+        } catch (error) {
+          this.notify(error.message, "error");
+        }
+      },
+      async importTunnels() {
+        if (!this.importTunnelJson.trim()) {
+          this.notify("请粘贴要导入的 JSON 数据。", "warning");
+          return;
+        }
+        try {
+          let importData;
+          try {
+            importData = JSON.parse(this.importTunnelJson);
+          } catch (_) {
+            this.notify("JSON 格式无效，请检查后再试。", "error");
+            return;
+          }
+          const result = await this.withGlobalLoading(
+            () => this.api("/api/tunnels/import", {
+              method: "POST",
+              body: JSON.stringify(importData)
+            }),
+            "正在导入..."
+          );
+          this.importResult = result;
+          this.importTunnelJson = "";
+          const msg = `导入完成：新建 ${result.created || 0} 个，更新 ${result.updated || 0} 个` +
+            (result.errors?.length ? `，${result.errors.length} 个失败` : "");
+          this.notify(msg, result.errors?.length ? "warning" : "success");
+          await this.loadTunnels();
         } catch (error) {
           this.notify(error.message, "error");
         }
@@ -1369,16 +1479,29 @@
           this.notify(error.message, "error");
         }
       },
-      async startTunnel(tunnel) {
+      async startTunnel(tunnel, { force = false } = {}) {
         try {
           await this.withGlobalLoading(
-            () => this.api(`/api/tunnels/${tunnel.id}/start`, { method: "POST" }),
+            () => this.api(`/api/tunnels/${tunnel.id}/start${force ? "?force=true" : ""}`, { method: "POST" }),
             "正在启动 Tunnel..."
           );
           this.selectedRuntimeTunnelId = tunnel.id;
           await Promise.all([this.refreshRuntimeStatus(), this.loadTunnels()]);
           this.notify("Tunnel 已启动");
         } catch (error) {
+          if (error.status === 409) {
+            try {
+              await ElementPlus.ElMessageBox.confirm(
+                error.message,
+                "确认接管 Tunnel",
+                { confirmButtonText: "确认接管", cancelButtonText: "取消", type: "warning" }
+              );
+              await this.startTunnel(tunnel, { force: true });
+            } catch {
+              // user cancelled
+            }
+            return;
+          }
           this.notify(error.message, "error");
         }
       },
@@ -1576,9 +1699,98 @@
         this.runtimeMetricsLastPayload = normalizedPayload;
         const snapshotLabel = `[metrics] ${this.formatDateTime(new Date().toISOString())}`;
         this.runtimeMetricsHistory.push(`${snapshotLabel}\n${normalizedPayload}`);
+        if (this.runtimeMetricsHistory.length > 20) {
+          this.runtimeMetricsHistory = this.runtimeMetricsHistory.slice(-20);
+        }
         await this.updateRuntimeViewerDisplay(this.runtimeMetricsHistory.join("\n\n"), {
           reset: this.runtimeMetricsHistory.length === 1
         });
+      },
+      parseMetricsText(rawText) {
+        const text = String(rawText || "").trim();
+        if (!text) return { connections: null, bytesUp: null, bytesDown: null, requests: null, errors: null, uptimeSeconds: null };
+
+        const getFloat = (name) => {
+          const match = text.match(new RegExp(`${name}\\s+([\\d.]+(?:e[+-]\\d+)?)`));
+          return match ? parseFloat(match[1]) : null;
+        };
+
+        return {
+          connections: getFloat("cloudflared_tunnel_active_connections"),
+          bytesUp: getFloat("cloudflared_tunnel_total_bytes"),
+          bytesDown: getFloat("cloudflared_tunnel_received_bytes"),
+          requests: getFloat("cloudflared_tunnel_requests"),
+          errors: getFloat("cloudflared_tunnel_request_errors"),
+          uptimeSeconds: getFloat("cloudflared_tunnel_uptime_secs")
+        };
+      },
+      formatBytes(bytes) {
+        if (bytes === null || bytes === undefined) return "-";
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+        return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+      },
+    toggleAllFiltered() {
+        if (this.allFilteredSelected) {
+          this.tunnelSelection = [];
+        } else {
+          this.tunnelSelection = this.filteredTunnels.map(t => t.id);
+        }
+      },
+      isTunnelSelected(tunnelId) {
+        return this.tunnelSelection.includes(tunnelId);
+      },
+      toggleTunnelSelection(tunnelId) {
+        const idx = this.tunnelSelection.indexOf(tunnelId);
+        if (idx >= 0) {
+          this.tunnelSelection.splice(idx, 1);
+        } else {
+          this.tunnelSelection.push(tunnelId);
+        }
+      },
+      clearTunnelSelection() {
+        this.tunnelSelection = [];
+      },
+      async batchAction(action) {
+        const label = { start: "启动", stop: "停止", delete: "删除" }[action];
+        if (!this.tunnelSelection.length) {
+          this.notify("请先选择要操作的 Tunnel。", "warning");
+          return;
+        }
+        if (action === "delete") {
+          try {
+            await ElementPlus.ElMessageBox.confirm(
+              `确定要批量删除 ${this.tunnelSelection.length} 个 Tunnel？此操作不可撤销。`,
+              "批量删除确认",
+              { confirmButtonText: "确定删除", cancelButtonText: "取消", type: "warning" }
+            );
+          } catch (_) { return; }
+        }
+        this.batchActionLoading = true;
+        try {
+          const payload = await this.withGlobalLoading(
+            () => this.api("/api/tunnels/batch", {
+              method: "POST",
+              body: JSON.stringify({ action, tunnelIds: [...this.tunnelSelection] })
+            }),
+            `正在批量${label}...`
+          );
+          const results = payload.results || [];
+          const succeeded = results.filter(r => r.success).length;
+          const failed = results.filter(r => !r.success).length;
+          if (failed > 0) {
+            this.notify(`批量${label}：${succeeded} 成功，${failed} 失败`, "warning");
+          } else {
+            this.notify(`批量${label}：${succeeded} 个全部成功`);
+          }
+          this.tunnelSelection = [];
+          await Promise.all([this.loadTunnels(), this.refreshRuntimeStatus()]);
+        } catch (error) {
+          this.notify(error.message, "error");
+        } finally {
+          this.batchActionLoading = false;
+        }
       }
     },
     mounted() {
@@ -1660,10 +1872,14 @@
           <aside class="glass-sidebar">
             <div class="sidebar-brand">
               <div class="brand-orb">CF</div>
-              <div>
+              <div class="sidebar-brand-text">
                 <span class="sidebar-eyebrow">CONTROL PLANE</span>
                 <strong>Cloudflare Tunnel</strong>
               </div>
+              <button class="theme-toggle-btn" @click="toggleDarkMode" :title="darkMode ? '切换亮色主题' : '切换暗色主题'">
+                <span v-if="darkMode">☀️</span>
+                <span v-else>🌙</span>
+              </button>
             </div>
 
             <div class="nav-stack">
@@ -1717,7 +1933,7 @@
                             <div class="home-tunnel-head">
                               <div>
                                 <strong>{{ tunnel.name }}</strong>
-                                <p>{{ tunnel.connections || 0 }} 条连接</p>
+                                <p>{{ tunnel.connections || 0 }} 条连接<span v-if="getTunnelUptime(tunnel.id)"> · 已运行 {{ getTunnelUptime(tunnel.id) }}</span></p>
                               </div>
                               <div class="tag-row">
                                 <el-tag class="glass-tag" :type="getTunnelStatusType(tunnel)">{{ getTunnelStatusLabel(tunnel) }}</el-tag>
@@ -1911,6 +2127,12 @@
                           </el-tag>
                           <el-button type="primary" class="glass-btn" @click="createTunnelVisible = true">创建 Tunnel</el-button>
                           <el-button class="glass-btn" @click="reloadTunnelsManually">刷新状态</el-button>
+                          <el-button class="glass-btn" @click="exportTunnels">导出</el-button>
+                          <el-button class="glass-btn" @click="showImportDialog = true">导入</el-button>
+                          <el-button v-if="tunnelSelection.length" class="glass-btn" @click="clearTunnelSelection">取消选择 ({{ selectedTunnelCount }})</el-button>
+                          <el-button v-if="tunnelSelection.length" type="primary" class="glass-btn" :loading="batchActionLoading" @click="batchAction('start')">批量连接</el-button>
+                          <el-button v-if="tunnelSelection.length" class="glass-btn" :loading="batchActionLoading" @click="batchAction('stop')">批量停止</el-button>
+                          <el-button v-if="tunnelSelection.length" class="glass-btn danger-btn" :loading="batchActionLoading" @click="batchAction('delete')">批量销毁</el-button>
                         </el-space>
                       </div>
                     </template>
@@ -1919,12 +2141,20 @@
                       <div v-if="tunnelsLoading" class="skeleton-stack">
                         <div v-for="n in 4" :key="'tunnel-skeleton-' + n" class="skeleton-card"></div>
                       </div>
+                      <div v-if="tunnelsLoading" class="skeleton-stack">
+                        <div v-for="n in 4" :key="'tunnel-skeleton-' + n" class="skeleton-card"></div>
+                      </div>
                       <div v-else-if="!filteredTunnels.length" class="empty-line">
                         {{ tunnelSearch ? '没有匹配的 Tunnel。' : '还没有可展示的 Tunnel。' }}
                       </div>
-                      <transition-group v-else tag="div" name="list" class="tunnel-stack">
-                        <div v-for="tunnel in filteredTunnels" :key="tunnel.id" class="tunnel-item-card">
-                          <div class="tunnel-card-layout">
+                      <div v-else class="tunnel-stack">
+                        <div class="tunnel-item-card tunnel-select-all">
+                          <el-checkbox :model-value="allFilteredSelected" :indeterminate="tunnelSelection.length > 0 && !allFilteredSelected" @change="toggleAllFiltered" class="glass-checkbox" />
+                          <span>全选 ({{ selectedTunnelCount }} / {{ filteredTunnelCount }})</span>
+                        </div>
+                        <div v-for="tunnel in filteredTunnels" :key="tunnel.id" class="tunnel-item-card tunnel-checkable">
+                          <el-checkbox :model-value="isTunnelSelected(tunnel.id)" @change="toggleTunnelSelection(tunnel.id)" class="glass-checkbox" />
+                          <div class="tunnel-card-layout" style="flex:1; min-width:0;">
                             <div class="tunnel-card-copy">
                               <div class="tunnel-card-summary">
                                 <strong>{{ tunnel.name }}</strong>
@@ -1956,7 +2186,7 @@
                             </el-space>
                           </div>
                         </div>
-                      </transition-group>
+                      </div>
                     </div>
                   </el-card>
                 </section>
@@ -2169,7 +2399,7 @@
               <el-card class="glass-card metric-card">
                 <span class="metric-kicker">状态</span>
                 <strong>{{ selectedProcess?.running ? '运行中' : '未运行' }}</strong>
-                <p>{{ selectedProcess ? getProcessSourceLabel(selectedProcess) : '尚未发现进程' }}</p>
+                <p>{{ selectedProcess ? getProcessSourceLabel(selectedProcess) : '尚未发现进程' }}<span v-if="selectedProcess?.startedAt"> · {{ formatUptime(selectedProcess.startedAt) }}</span></p>
               </el-card>
               <el-card class="glass-card metric-card">
                 <span class="metric-kicker">PID</span>
@@ -2180,6 +2410,29 @@
                 <span class="metric-kicker">Metrics</span>
                 <strong>{{ selectedProcess?.metricsPort || '-' }}</strong>
                 <p>{{ selectedProcess?.metricsUrl || '暂无 metrics 地址' }}</p>
+              </el-card>
+            </div>
+
+            <div v-if="runtimeViewerMode === 'metrics'" class="runtime-dialog-metrics">
+              <el-card class="glass-card metric-card">
+                <span class="metric-kicker">活跃连接</span>
+                <strong>{{ parsedMetrics.connections !== null ? parsedMetrics.connections : '-' }}</strong>
+                <p>当前连接数</p>
+              </el-card>
+              <el-card class="glass-card metric-card">
+                <span class="metric-kicker">上行流量</span>
+                <strong>{{ formatBytes(parsedMetrics.bytesUp) }}</strong>
+                <p>已发送</p>
+              </el-card>
+              <el-card class="glass-card metric-card">
+                <span class="metric-kicker">下行流量</span>
+                <strong>{{ formatBytes(parsedMetrics.bytesDown) }}</strong>
+                <p>已接收</p>
+              </el-card>
+              <el-card class="glass-card metric-card">
+                <span class="metric-kicker">请求数</span>
+                <strong>{{ parsedMetrics.requests !== null ? parsedMetrics.requests.toLocaleString() : '-' }}</strong>
+                <p>{{ parsedMetrics.errors !== null ? '错误 ' + parsedMetrics.errors : '' }}</p>
               </el-card>
             </div>
 
@@ -2203,6 +2456,28 @@
             <el-space wrap>
               <el-button class="glass-btn" @click="createTunnelVisible = false">取消</el-button>
               <el-button type="primary" class="glass-btn" @click="createTunnel">创建</el-button>
+            </el-space>
+          </template>
+        </el-dialog>
+
+        <el-dialog v-model="showImportDialog" title="导入 Tunnel 配置" width="720px" align-center class="glass-dialog glass-modal" destroy-on-close>
+          <el-form class="glass-form element-form" label-position="top">
+            <el-form-item label="粘贴导出的 JSON 数据">
+              <el-input type="textarea" class="glass-textarea" :rows="12" resize="none" v-model="importTunnelJson" placeholder="粘贴从「导出」功能获取的 JSON 数据..." />
+            </el-form-item>
+          </el-form>
+          <div v-if="importResult" class="origin-result" :class="importResult.errors?.length ? 'fail' : 'ok'" style="margin-top: 12px;">
+            <div>新建 {{ importResult.created || 0 }} 个 Tunnel</div>
+            <div>更新 {{ importResult.updated || 0 }} 个 Tunnel 配置</div>
+            <div v-if="importResult.errors?.length">失败 {{ importResult.errors.length }} 个</div>
+            <div v-for="err in (importResult.errors || [])" :key="err.tunnelId" style="font-size: 12px; margin-top: 4px;">
+              {{ err.name || err.tunnelId }}：{{ err.message }}
+            </div>
+          </div>
+          <template #footer>
+            <el-space wrap>
+              <el-button class="glass-btn" @click="showImportDialog = false; importResult = null">关闭</el-button>
+              <el-button type="primary" class="glass-btn" @click="importTunnels">开始导入</el-button>
             </el-space>
           </template>
         </el-dialog>

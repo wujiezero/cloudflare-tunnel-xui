@@ -719,13 +719,23 @@ class CloudflaredManager {
 
     const pid = await new Promise((resolve, reject) => {
       const logFd = fs.openSync(paths.log, "a");
+      let settled = false;
       const child = spawn("nohup", [runtime.binaryPath, ...args], {
         cwd: process.cwd(),
         detached: true,
         stdio: ["ignore", logFd, logFd]
       });
-      child.on("spawn", () => resolve(child.pid));
-      child.on("error", reject);
+      child.on("spawn", () => {
+        settled = true;
+        resolve(child.pid);
+      });
+      child.on("error", (error) => {
+        if (!settled) {
+          fs.closeSync(logFd);
+          settled = true;
+        }
+        reject(error);
+      });
       child.unref();
     });
 
@@ -735,6 +745,14 @@ class CloudflaredManager {
 
     await fsp.writeFile(paths.pid, `${pid}\n`, "utf8");
     await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const running = await this.isPidRunning(pid);
+    if (!running) {
+      const earlyLogs = await this.readRecentLogs(paths.log, { maxLines: 20 });
+      const logSnippet = earlyLogs.length ? earlyLogs.join("\n") : "(no log output)";
+      throw new Error(`cloudflared exited immediately after start (PID ${pid}). Recent logs:\n${logSnippet}`);
+    }
+
     return this.getManagedTunnelStatus(tunnelId);
   }
 

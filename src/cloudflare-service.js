@@ -128,7 +128,26 @@ function classifyCloudflareResponseError(response, data) {
   });
 }
 
-async function requestCloudflare(path, { method = "GET", token, body } = {}) {
+async function requestCloudflare(path, { method = "GET", token, body, retries = 2 } = {}) {
+  let lastError = null;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt > 0) {
+      const delay = Math.min(500 * (2 ** (attempt - 1)), 4000);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+    try {
+      return await requestCloudflareOnce(path, { method, token, body });
+    } catch (error) {
+      lastError = error;
+      if (!error.retryable || attempt >= retries) {
+        throw error;
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function requestCloudflareOnce(path, { method = "GET", token, body } = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   let response;

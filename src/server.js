@@ -1,6 +1,7 @@
 "use strict";
 
 const express = require("express");
+const fs = require("node:fs");
 const http = require("node:http");
 const https = require("node:https");
 const path = require("node:path");
@@ -231,44 +232,46 @@ async function bootstrap() {
 
   await cloudflaredManager.ensureBinaryReady();
 
-  // Auto restart managed tunnels
-  try {
-    const tunnelIds = await cloudflaredManager.listTunnelIds();
-    if (tunnelIds.length > 0) {
-      console.log(`Found ${tunnelIds.length} managed tunnels, checking for auto-restart...`);
-      const credentials = await getCloudflareCredentials();
-      for (const tunnelId of tunnelIds) {
-        const status = await cloudflaredManager.getManagedTunnelStatus(tunnelId);
-        if (!status.running) {
-          console.log(`Auto-restarting tunnel ${tunnelId}...`);
-          try {
-            const runToken = await getTunnelToken(credentials.accountId, credentials.apiToken, tunnelId);
-            const tunnel = await getTunnel(credentials.accountId, credentials.apiToken, tunnelId);
-            // If the tunnel is already connected elsewhere, do NOT start another local connector.
-            // This avoids duplicate "cloudflared tunnel run" processes fighting for the same tunnel.
-            if (Number(tunnel.connections || 0) > 0) {
-              console.log(
-                `Skip auto-restart for tunnel ${tunnelId}: already has ${tunnel.connections} active connection(s) on Cloudflare side.`
-              );
-              continue;
+  // Auto restart managed tunnels (only if autoStart is enabled in config)
+  if (config.cloudflared?.autoStart !== false) {
+    try {
+      const tunnelIds = await cloudflaredManager.listTunnelIds();
+      if (tunnelIds.length > 0) {
+        console.log(`Found ${tunnelIds.length} managed tunnels, checking for auto-restart...`);
+        const credentials = await getCloudflareCredentials();
+        for (const tunnelId of tunnelIds) {
+          const status = await cloudflaredManager.getManagedTunnelStatus(tunnelId);
+          if (!status.running) {
+            console.log(`Auto-restarting tunnel ${tunnelId}...`);
+            try {
+              const runToken = await getTunnelToken(credentials.accountId, credentials.apiToken, tunnelId);
+              const tunnel = await getTunnel(credentials.accountId, credentials.apiToken, tunnelId);
+              if (Number(tunnel.connections || 0) > 0) {
+                console.log(
+                  `Skip auto-restart for tunnel ${tunnelId}: already has ${tunnel.connections} active connection(s) on Cloudflare side.`
+                );
+                continue;
+              }
+              const configuration = await getTunnelConfiguration(credentials.accountId, credentials.apiToken, tunnelId);
+              await cloudflaredManager.start({
+                tunnelId,
+                tunnelName: tunnel.name,
+                runToken,
+                mappings: configuration.mappings,
+                catchAllService: configuration.catchAll.service
+              });
+              console.log(`Tunnel ${tunnelId} restarted successfully.`);
+            } catch (error) {
+              console.error(`Failed to auto-restart tunnel ${tunnelId}:`, error.message);
             }
-            const configuration = await getTunnelConfiguration(credentials.accountId, credentials.apiToken, tunnelId);
-            await cloudflaredManager.start({
-              tunnelId,
-              tunnelName: tunnel.name,
-              runToken,
-              mappings: configuration.mappings,
-              catchAllService: configuration.catchAll.service
-            });
-            console.log(`Tunnel ${tunnelId} restarted successfully.`);
-          } catch (error) {
-            console.error(`Failed to auto-restart tunnel ${tunnelId}:`, error.message);
           }
         }
       }
+    } catch (error) {
+      console.error('Error during auto-restart check:', error.message);
     }
-  } catch (error) {
-    console.error('Error during auto-restart check:', error.message);
+  } else {
+    console.log('Auto-start disabled (cloudflared.autoStart = false), skipping tunnel auto-restart.');
   }
 
   app.disable("x-powered-by");
@@ -280,7 +283,7 @@ async function bootstrap() {
     res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+      "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data:; connect-src 'self'; font-src 'self' data: https://fonts.gstatic.com; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     );
     next();
   });
@@ -502,20 +505,14 @@ async function bootstrap() {
       const credentials = await getCloudflareCredentials();
       const tunnels = await listTunnels(credentials.accountId, credentials.apiToken);
       const tunnelDetails = await Promise.all(
-        tunnels.map(async (tunnel) => {
-          const configuration = await getTunnelConfiguration(
+        tunnels.map((tunnel) =>
+          getTunnelConfiguration(
             credentials.accountId,
             credentials.apiToken,
             tunnel.id
-          ).catch(() => ({ mappings: [], catchAll: { service: "http_status:404" } }));
-
-          return [
-            tunnel.id,
-            {
-              configuration
-            }
-          ];
-        })
+          ).catch(() => ({ mappings: [], catchAll: { service: "http_status:404" } }))
+            .then((configuration) => [tunnel.id, { configuration }])
+        )
       );
       const detailMap = Object.fromEntries(tunnelDetails);
 
@@ -727,6 +724,14 @@ async function bootstrap() {
         credentials.apiToken,
         req.params.id
       );
+      // Guard against accidentally kicking off a remote tunnel connection
+      const remoteConnections = Number(tunnel.connections || 0);
+      const force = req.query?.force === "true" || req.body?.force === true;
+      if (remoteConnections > 0 && !force) {
+        return res.status(409).json({
+          message: `该 Tunnel 已有 ${remoteConnections} 个活跃连接（可能在其他服务器运行中），在此启动会将其断开。确认要接管请添加 ?force=true。`
+        });
+      }
       const runToken = await getTunnelToken(
         credentials.accountId,
         credentials.apiToken,
@@ -786,20 +791,205 @@ async function bootstrap() {
     }
   });
 
+  app.post("/api/tunnels/batch", requireAuth, async (req, res) => {
+    const { action, tunnelIds } = req.body || {};
+    const ids = Array.isArray(tunnelIds) ? tunnelIds.filter(Boolean) : [];
+    const validActions = new Set(["start", "stop", "delete"]);
+    if (!action || !validActions.has(action)) {
+      return res.status(400).json({ message: "action must be one of: start, stop, delete" });
+    }
+    if (!ids.length) {
+      return res.status(400).json({ message: "tunnelIds must be a non-empty array" });
+    }
+
+    const results = [];
+    const credentials = await getCloudflareCredentials();
+    const force = req.body?.force === true;
+
+    for (const tunnelId of ids) {
+      try {
+        if (action === "start") {
+          const tunnel = await getTunnel(credentials.accountId, credentials.apiToken, tunnelId);
+          const remoteConnections = Number(tunnel.connections || 0);
+          if (remoteConnections > 0 && !force) {
+            results.push({ tunnelId, success: false, error: `已有 ${remoteConnections} 个活跃连接，可能在其他服务器运行中` });
+            continue;
+          }
+          const runToken = await getTunnelToken(credentials.accountId, credentials.apiToken, tunnelId);
+          const configuration = await getTunnelConfiguration(credentials.accountId, credentials.apiToken, tunnelId);
+          await cloudflaredManager.start({
+            runToken,
+            tunnelId: tunnel.id,
+            tunnelName: tunnel.name,
+            mappings: configuration.mappings,
+            catchAllService: configuration.catchAll?.service || "http_status:404"
+          });
+          results.push({ tunnelId, success: true });
+        } else if (action === "stop") {
+          await cloudflaredManager.stop(tunnelId);
+          results.push({ tunnelId, success: true });
+        } else if (action === "delete") {
+          // Only delete if tunnel is not currently running locally
+          const managedStatus = await cloudflaredManager.getManagedTunnelStatus(tunnelId).catch(() => ({ running: false }));
+          if (managedStatus.running) {
+            results.push({ tunnelId, success: false, error: "Tunnel is currently running locally, stop it first" });
+          } else {
+            await deleteTunnel(credentials.accountId, credentials.apiToken, tunnelId);
+            results.push({ tunnelId, success: true });
+          }
+        }
+      } catch (error) {
+        results.push({ tunnelId, success: false, error: error.message });
+      }
+    }
+
+    return res.json({ results });
+  });
+
+  app.get("/api/health", async (_req, res) => {
+    const binaryReady = await cloudflaredManager.isBinaryUsable(
+      (await cloudflaredManager.getRuntimeConfig()).binaryPath
+    );
+    const runtimeStatus = await cloudflaredManager.getStatus({ includeLogs: false });
+    return res.json({
+      status: "ok",
+      uptime: process.uptime(),
+      cloudflared: {
+        binaryReady,
+        version: cloudflaredManager.binaryVersion,
+        managedProcesses: runtimeStatus.processCount,
+        runningProcesses: runtimeStatus.runningCount
+      }
+    });
+  });
+
+  app.get("/api/tunnels/export", requireAuth, async (_req, res) => {
+    try {
+      const credentials = await getCloudflareCredentials();
+      const tunnels = await listTunnels(credentials.accountId, credentials.apiToken);
+      const exportData = await Promise.all(
+        tunnels.map(async (tunnel) => {
+          const configuration = await getTunnelConfiguration(
+            credentials.accountId, credentials.apiToken, tunnel.id
+          ).catch(() => ({ mappings: [], catchAll: { service: "http_status:404" } }));
+          return {
+            id: tunnel.id,
+            name: tunnel.name,
+            createdAt: tunnel.createdAt,
+            configuration: {
+              mappings: configuration.mappings || [],
+              catchAll: configuration.catchAll || { service: "http_status:404" }
+            }
+          };
+        })
+      );
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="cloudflare-tunnels-${timestamp}.json"`);
+      return res.json({
+        exportedAt: new Date().toISOString(),
+        version: "1.0",
+        tunnels: exportData
+      });
+    } catch (error) {
+      return res.status(error.status || 500).json({
+        message: error.message,
+        details: error.details || null
+      });
+    }
+  });
+
+  app.post("/api/tunnels/import", requireAuth, async (req, res) => {
+    try {
+      const credentials = await getCloudflareCredentials();
+      const importData = req.body;
+      const tunnels = Array.isArray(importData?.tunnels) ? importData.tunnels : [];
+      if (!tunnels.length) {
+        return res.status(400).json({ message: "导入数据中没有找到 Tunnel 配置。" });
+      }
+
+      const existingTunnels = await listTunnels(credentials.accountId, credentials.apiToken);
+      const existingMap = new Map(existingTunnels.map(t => [t.id, t]));
+
+      const results = { created: 0, updated: 0, errors: [] };
+
+      for (const item of tunnels) {
+        try {
+          let targetId = item.id;
+          if (existingMap.has(targetId)) {
+            const mappings = Array.isArray(item.configuration?.mappings) ? item.configuration.mappings : [];
+            await updateTunnelConfiguration(credentials.accountId, credentials.apiToken, targetId, { mappings });
+            results.updated += 1;
+          } else {
+            const newTunnel = await createTunnel(credentials.accountId, credentials.apiToken, {
+              name: item.name || "Imported Tunnel",
+              tunnel_secret: crypto.randomBytes(32).toString("base64")
+            });
+            targetId = newTunnel.id;
+            const mappings = Array.isArray(item.configuration?.mappings) ? item.configuration.mappings : [];
+            await updateTunnelConfiguration(credentials.accountId, credentials.apiToken, targetId, { mappings });
+            results.created += 1;
+          }
+        } catch (error) {
+          results.errors.push({
+            tunnelId: item.id || "unknown",
+            name: item.name || "unknown",
+            message: error.message
+          });
+        }
+      }
+
+      return res.json(results);
+    } catch (error) {
+      return res.status(error.status || 500).json({
+        message: error.message,
+        details: error.details || null
+      });
+    }
+  });
+
   app.use((_req, res) => {
     res.sendFile(path.resolve(publicRoot, "index.html"));
   });
 
-  const server = app.listen(port, host, () => {
-    console.log(
-      `Cloudflare Tunnel XUI listening on http://${host}:${port}`
-    );
-  });
+  const sslConfig = config.server.ssl || {};
+  let httpsServer = null;
+  if (sslConfig.enabled && sslConfig.certPath && sslConfig.keyPath) {
+    const certPath = path.resolve(process.cwd(), sslConfig.certPath);
+    const keyPath = path.resolve(process.cwd(), sslConfig.keyPath);
+    if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+      console.warn("SSL is enabled but cert/key files are missing, falling back to HTTP only.");
+    } else {
+      const tlsOptions = {
+        cert: fs.readFileSync(certPath),
+        key: fs.readFileSync(keyPath)
+      };
+      httpsServer = https.createServer(tlsOptions, app);
+      httpsServer.listen(port, host, () => {
+        console.log(
+          `Cloudflare Tunnel XUI listening on https://${host}:${port}`
+        );
+      });
+    }
+  }
+
+  let server = null;
+  if (!httpsServer) {
+    server = app.listen(port, host, () => {
+      console.log(
+        `Cloudflare Tunnel XUI listening on http://${host}:${port}`
+      );
+    });
+  } else {
+    server = httpsServer;
+  }
 
   async function shutdown(signal) {
     console.log(`Received ${signal}, stopping managed cloudflared processes...`);
     await cloudflaredManager.stopAll().catch(() => null);
-    server.close(() => process.exit(0));
+    if (server) {
+      server.close(() => process.exit(0));
+    }
   }
 
   process.on("SIGINT", () => shutdown("SIGINT"));
