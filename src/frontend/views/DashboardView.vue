@@ -1,9 +1,9 @@
 <template>
-  <div class="dashboard-page">
+  <div class="dashboard-page page-shell">
     <template v-if="showSkeleton">
       <div class="dashboard-skeleton">
         <div class="status-grid">
-          <div v-for="item in skeletonCards" :key="item" class="signal-card skeleton-card">
+          <div v-for="item in skeletonCards" :key="item" class="signal-card surface-card skeleton-card">
             <div class="skeleton-dot"></div>
             <div class="skeleton-copy">
               <div class="skeleton-line short"></div>
@@ -13,7 +13,7 @@
         </div>
         <div class="skeleton-heading"></div>
         <div class="tunnel-overview">
-          <div v-for="index in 3" :key="index" class="overview-card skeleton-overview">
+          <div v-for="index in 3" :key="index" class="overview-card surface-card skeleton-overview">
             <div class="skeleton-line wide"></div>
             <div class="skeleton-pill-row">
               <span class="skeleton-pill"></span>
@@ -26,7 +26,7 @@
 
     <template v-else>
       <transition-group name="card-stagger" tag="div" class="status-grid">
-        <div class="signal-card" v-for="signal in signals" :key="signal.label">
+        <div class="signal-card surface-card interactive-surface" v-for="signal in signals" :key="signal.label">
           <div class="signal-dot" :class="signal.ok ? 'ok' : 'warn'"></div>
           <div>
             <div class="signal-label">{{ signal.label }}</div>
@@ -35,7 +35,7 @@
         </div>
       </transition-group>
 
-      <div v-if="cfState.runtimeMetricsHistory.length > 1" class="chart-section glass-card">
+      <div v-if="cfState.runtimeMetricsHistory.length > 1" class="chart-section surface-card">
         <h3>实时指标</h3>
         <div class="chart-row">
           <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="activeConnections" label="连接数" color="#67c23a" />
@@ -49,7 +49,7 @@
         <div
           v-for="t in tunnels.slice(0, 6)"
           :key="t.id"
-          class="overview-card clickable"
+          class="overview-card surface-card interactive-surface clickable"
           @click="router.push(`/tunnels/${t.id}/edit`)"
         >
           <div class="overview-header">
@@ -70,7 +70,7 @@
             </span>
           </div>
         </div>
-        <div v-if="tunnels.length > 6" class="view-all-card" @click="router.push('/tunnels')">
+        <div v-if="tunnels.length > 6" class="view-all-card surface-card interactive-surface" @click="router.push('/tunnels')">
           查看全部 {{ tunnels.length }} 个 Tunnel →
         </div>
       </div>

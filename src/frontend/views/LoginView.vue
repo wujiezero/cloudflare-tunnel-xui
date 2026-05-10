@@ -18,9 +18,9 @@
         </el-form-item>
       </el-form>
       <div class="login-features">
-        <span>🔒 加密凭据存储</span>
-        <span>🚀 一键隧道管理</span>
-        <span>📊 实时状态监控</span>
+        <span><i class="feature-mark"></i>加密凭据存储</span>
+        <span><i class="feature-mark"></i>一键隧道管理</span>
+        <span><i class="feature-mark"></i>实时状态监控</span>
       </div>
     </div>
   </div>
@@ -82,8 +82,25 @@ h1 { text-align: center; margin: 0 0 4px; font-size: 22px; }
 .login-subtitle { text-align: center; color: var(--text-secondary, #999); margin: 0 0 28px; font-size: 14px; }
 .login-btn { width: 100%; }
 .login-features {
-  display: flex; justify-content: center; gap: 16px; margin-top: 24px;
-  font-size: 12px; color: var(--text-secondary, #999); flex-wrap: wrap;
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 24px;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  flex-wrap: wrap;
+}
+.login-features span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.feature-mark {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--primary, #2a6df6);
+  box-shadow: 0 0 10px rgba(42, 109, 246, 0.32);
 }
 @keyframes login-enter {
   from { opacity: 0; transform: translateY(10px); }

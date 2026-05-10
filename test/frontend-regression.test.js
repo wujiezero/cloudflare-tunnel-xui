@@ -119,10 +119,75 @@ test("vite entry html does not ship debug scaffolding", () => {
   assert.doesNotMatch(entry, /window\.__dbg/);
 });
 
+test("vite entry uses CSP-safe boot status script", () => {
+  const entry = read("index.html");
+  const bootScript = read("public/boot-status.js");
+
+  assert.doesNotMatch(entry, /<script>\s*window\.setTimeout/);
+  assert.match(entry, /<script\s+src="\/boot-status\.js"\s+defer><\/script>/);
+  assert.match(bootScript, /document\.getElementById\("boot-status"\)/);
+});
+
+test("login feature list does not use emoji icons", () => {
+  const login = read("src/frontend/views/LoginView.vue");
+
+  assert.doesNotMatch(login, /🔒|🚀|📊/);
+  assert.match(login, /feature-mark/);
+});
+
 test("router supports direct tunnels paths and legacy hash URLs", () => {
   const router = read("src/frontend/router/index.js");
 
   assert.match(router, /createWebHistory/);
   assert.doesNotMatch(router, /createWebHashHistory/);
   assert.match(router, /normalizeLegacyHashRoute\(\)/);
+});
+
+test("global design system exposes shared motion and surface primitives", () => {
+  const globalCss = read("src/frontend/styles/global.css");
+
+  assert.match(globalCss, /--motion-fast:\s*150ms/);
+  assert.match(globalCss, /--motion-normal:\s*220ms/);
+  assert.match(globalCss, /--surface-radius:\s*16px/);
+  assert.match(globalCss, /\.page-shell\s*\{/);
+  assert.match(globalCss, /\.surface-card\s*\{/);
+  assert.match(globalCss, /\.interactive-surface\s*\{/);
+  assert.match(globalCss, /@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+});
+
+test("authenticated shell uses normalized app structure and route transitions", () => {
+  const layout = read("src/frontend/components/layout/AppLayout.vue");
+
+  assert.match(layout, /class="app-layout liquid-shell"/);
+  assert.match(layout, /class="main-area scroll-thin"/);
+  assert.match(layout, /class="content-area"/);
+  assert.match(layout, /name="view-slide-fade"/);
+  assert.match(layout, /appear/);
+  assert.match(layout, /--motion-normal/);
+});
+
+test("sidebar uses text-safe controls and active motion indicator", () => {
+  const sidebar = read("src/frontend/components/layout/AppSidebar.vue");
+
+  assert.doesNotMatch(sidebar, /☀️|🌙|🔧|🚀|⚙️/);
+  assert.match(sidebar, /class="nav-indicator"/);
+  assert.match(sidebar, /class="theme-toggle"/);
+  assert.match(sidebar, /class="logout-button"/);
+});
+
+test("main pages use shared page and surface classes", () => {
+  const pageFiles = [
+    "src/frontend/views/DashboardView.vue",
+    "src/frontend/views/TunnelListView.vue",
+    "src/frontend/views/SettingsView.vue",
+    "src/frontend/views/TunnelEditorView.vue",
+    "src/frontend/views/TunnelCreateView.vue",
+    "src/frontend/views/AboutView.vue"
+  ];
+
+  for (const file of pageFiles) {
+    const source = read(file);
+    assert.match(source, /page-shell/, `${file} should use shared page-shell spacing`);
+    assert.match(source, /surface-card/, `${file} should use shared surface-card styling`);
+  }
 });

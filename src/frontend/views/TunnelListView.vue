@@ -1,6 +1,6 @@
 <template>
-  <div class="tunnels-page">
-    <div class="toolbar">
+  <div class="tunnels-page page-shell">
+    <div class="toolbar toolbar-surface">
       <div class="toolbar-left">
         <el-input
           v-model="tunnelsState.tunnelSearch"
@@ -29,12 +29,12 @@
       </div>
     </div>
 
-    <div v-if="exporting" class="inline-status">
+    <div v-if="exporting" class="inline-status surface-card">
       <span class="inline-spinner"></span>
       <span>正在导出 Tunnel 配置...</span>
     </div>
 
-    <div v-if="tunnelsState.tunnelSelection.length" class="batch-bar">
+    <div v-if="tunnelsState.tunnelSelection.length" class="batch-bar surface-card">
       <span>已选择 {{ tunnelsState.tunnelSelection.length }} 个</span>
       <el-button size="small" @click="batchStart" :loading="tunnelsState.batchActionLoading">批量启动</el-button>
       <el-button size="small" @click="batchStop" :loading="tunnelsState.batchActionLoading">批量停止</el-button>
@@ -47,7 +47,7 @@
     </div>
 
     <div v-if="showSkeleton" class="tunnel-list-skeleton">
-      <div v-for="index in 4" :key="index" class="skeleton-tunnel-card">
+      <div v-for="index in 4" :key="index" class="skeleton-tunnel-card surface-card">
         <div class="skeleton-row">
           <span class="skeleton-checkbox"></span>
           <span class="skeleton-line title"></span>
@@ -68,7 +68,7 @@
     </div>
 
     <transition-group v-else-if="filteredTunnels.length" name="list" tag="div" class="tunnel-list">
-      <div v-for="t in filteredTunnels" :key="t.id" class="tunnel-card"
+      <div v-for="t in filteredTunnels" :key="t.id" class="tunnel-card surface-card interactive-surface"
            :class="{ selected: tunnelsState.tunnelSelection.includes(t.id) }">
         <div class="tunnel-card-header">
           <el-checkbox
