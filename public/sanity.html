@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sanity Check</title>
+  <style>
+    body { background: #ff6; margin: 0; padding: 20px; font-family: sans-serif; }
+    .box { padding: 20px; margin: 10px 0; border-radius: 8px; font-size: 14px; }
+    .ok { background: #cfc; color: #060; }
+    .err { background: #fcc; color: #c00; font-family: monospace; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1 style="color:#333">Sanity Check - 如果你能看到这行黄色背景，说明基本网络正常</h1>
+  <div id="log"></div>
+
+  <script type="module">
+    const log = document.getElementById('log');
+    function ok(msg) { log.innerHTML += '<div class="box ok">OK: ' + msg + '</div>'; }
+    function err(msg) { log.innerHTML += '<div class="box err">ERROR: ' + msg + '</div>'; }
+
+    ok('ES Module script executing');
+
+    try {
+      const vue = await import('/node_modules/.vite/deps/vue.js?v=a54da345');
+      ok('Vue loaded: ' + Object.keys(vue).slice(0,5).join(', '));
+
+      const ep = (await import('/node_modules/.vite/deps/element-plus.js?v=a54da345')).default;
+      ok('ElementPlus loaded');
+
+      const vr = (await import('/node_modules/.vite/deps/vue-router.js?v=a54da345'));
+      ok('Vue-Router loaded');
+
+      const app = vue.createApp({ template: '<div style="padding:20px;background:lightblue;border-radius:8px"><h2>Vue App Works!</h2><el-button @click=\"n++\">Clicked {{ n }}</el-button></div>', setup() { const n = vue.ref(0); return { n }; } });
+      app.use(ep);
+      app.mount('#app-root');
+      ok('Minimal Vue+EP app mounted');
+
+    } catch(e) {
+      err(e.message + '\n' + (e.stack || ''));
+    }
+  </script>
+  <div id="app-root"></div>
+</body>
+</html>

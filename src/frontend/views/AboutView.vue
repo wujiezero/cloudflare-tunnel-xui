@@ -1,6 +1,6 @@
 <template>
-  <div class="about-page">
-    <div class="glass-card">
+  <div class="about-page page-shell">
+    <div class="glass-card surface-card">
       <h3>Cloudflare Tunnel XUI</h3>
       <p class="version">基于 Node.js + Express 的 Cloudflare Tunnel 管理面板</p>
       <el-divider />
@@ -22,7 +22,7 @@
 
 <style scoped>
 .about-page { max-width: 600px; }
-.glass-card { padding: 24px; border-radius: 16px; border: 1px solid var(--glass-border, rgba(255,255,255,0.08)); }
+.glass-card { padding: 24px; }
 h3 { margin: 0 0 4px; }
 .version { margin: 0 0 8px; color: var(--text-secondary, #999); font-size: 13px; }
 h4 { margin: 0 0 8px; }

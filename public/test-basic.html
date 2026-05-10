@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>Basic Test</title>
+  <style>
+    body { margin:0; padding:20px; font-family:sans-serif; background:#ff9; }
+    .ok { padding:10px; margin:5px; background:#cfc; border-radius:6px; }
+    .fail { padding:10px; margin:5px; background:#fcc; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <h1>Basic Test - Yellow BG</h1>
+  <div id="results"></div>
+  <div id="vue-root"></div>
+
+  <script type="module">
+    const r = document.getElementById('results');
+    function ok(m) { r.innerHTML += '<div class="ok">OK: '+m+'</div>'; }
+    function fail(m) { r.innerHTML += '<div class="fail">FAIL: '+m+'</div>'; }
+
+    ok('Module script running');
+
+    try {
+      // Test Vite dependency loading
+      const v = await import('/node_modules/.vite/deps/vue.js?v=a54da345');
+      ok('Vue import ok');
+    } catch(e) {
+      fail('Vue import: '+e.message);
+    }
+
+    try {
+      const ep = await import('/node_modules/.vite/deps/element-plus.js?v=a54da345');
+      ok('ElementPlus import ok');
+    } catch(e) {
+      fail('ElementPlus import: '+e.message);
+    }
+
+    try {
+      await import('/node_modules/element-plus/dist/index.css');
+      ok('ElementPlus CSS ok');
+    } catch(e) {
+      fail('ElementPlus CSS: '+e.message);
+    }
+
+    try {
+      const app = (await import('/node_modules/.vite/deps/vue.js?v=a54da345')).createApp({
+        template: '<div style="padding:20px;background:#acf;border-radius:8px;margin:10px 0"><h2>Vue mounted</h2><p>If you see this blue box, Vue works</p></div>'
+      });
+      app.mount('#vue-root');
+      ok('Vue mount ok');
+    } catch(e) {
+      fail('Vue mount: '+e.message);
+    }
+
+    ok('ALL DONE - check for blue box below');
+  </script>
+</body>
+</html>

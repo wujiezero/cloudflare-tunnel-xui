@@ -1,5 +1,5 @@
 <template>
-  <div class="editor-page" v-loading="loadingTunnel">
+  <div class="editor-page page-shell" v-loading="loadingTunnel">
     <div v-if="!tunnel" class="editor-loading">
       <p>加载中...</p>
     </div>
@@ -25,7 +25,7 @@
         </div>
 
         <div class="mappings-list">
-          <div v-for="(mapping, idx) in tunnel.configuration?.mappings" :key="idx" class="mapping-row glass-card">
+          <div v-for="(mapping, idx) in tunnel.configuration?.mappings" :key="idx" class="mapping-row surface-card interactive-surface">
             <div class="mapping-fields">
               <el-input v-model="mapping.hostname" placeholder="域名 (如 app.example.com)" size="small" />
               <el-input v-model="mapping.service" placeholder="服务地址 (如 http://localhost:3000)" size="small" />
@@ -61,7 +61,7 @@
         <el-button @click="router.push('/tunnels')">返回列表</el-button>
       </div>
 
-      <div v-if="publishStatus" class="publish-section glass-card">
+      <div v-if="publishStatus" class="publish-section surface-card">
         <h4>DNS 发布状态</h4>
         <div v-if="publishStatus.summary">
           <el-tag size="small" type="success">{{ publishStatus.summary.published }} 已发布</el-tag>

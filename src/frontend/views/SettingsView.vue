@@ -1,8 +1,8 @@
 <template>
-  <div class="settings-page">
+  <div class="settings-page page-shell">
     <div class="settings-grid" v-loading="sState.settingsLoading">
       <!-- Cloudflare Credentials Card -->
-      <div class="glass-card settings-panel" v-loading="saving || testing">
+      <div class="glass-card surface-card interactive-surface settings-panel" v-loading="saving || testing">
         <h3>Cloudflare API 凭据</h3>
         <el-form label-position="top">
           <el-form-item label="Account ID">
@@ -40,7 +40,7 @@
       </div>
 
       <!-- Password Change Card -->
-      <div class="glass-card settings-panel" v-loading="changingPassword">
+      <div class="glass-card surface-card interactive-surface settings-panel" v-loading="changingPassword">
         <h3>修改密码</h3>
         <el-form label-position="top">
           <el-form-item label="当前密码">

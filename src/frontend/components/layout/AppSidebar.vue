@@ -1,8 +1,11 @@
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar surface-card">
     <div class="sidebar-brand">
-      <div class="brand-orb">CF</div>
-      <span class="brand-text">Tunnel XUI</span>
+      <div class="brand-mark">CF</div>
+      <div class="brand-copy">
+        <span class="brand-kicker">Cloudflare</span>
+        <strong class="brand-text">Tunnel XUI</strong>
+      </div>
     </div>
     <nav class="sidebar-nav">
       <router-link
@@ -12,14 +15,15 @@
         class="nav-item"
         :class="{ active: isActive(item.to) }"
       >
+        <span class="nav-indicator"></span>
         <span class="nav-label">{{ item.label }}</span>
       </router-link>
     </nav>
     <div class="sidebar-footer">
-      <el-button size="small" @click="toggleTheme" text>
-        {{ darkMode ? '☀️ 浅色' : '🌙 深色' }}
+      <el-button class="theme-toggle" size="small" @click="toggleTheme" text>
+        {{ darkMode ? '浅色模式' : '深色模式' }}
       </el-button>
-      <el-button size="small" @click="handleLogout" text type="danger">
+      <el-button class="logout-button" size="small" @click="handleLogout" text type="danger">
         退出
       </el-button>
     </div>
@@ -27,19 +31,17 @@
 </template>
 
 <script setup>
+import { computed } from "vue";
 import { useRouter, useRoute } from "vue-router";
-import { NAV_ITEMS } from "../../utils/constants.js";
 import { useTheme } from "../../composables/useTheme.js";
 import { useAuth } from "../../composables/useAuth.js";
-import { useApi } from "../../composables/useApi.js";
 
 const router = useRouter();
 const route = useRoute();
 const { state: themeState, toggleDarkMode } = useTheme();
 const { logout } = useAuth();
-const { api } = useApi();
 
-const darkMode = themeState.darkMode;
+const darkMode = computed(() => themeState.darkMode);
 
 const navItems = [
   { key: "dashboard", label: "首页", to: "/dashboard" },
@@ -64,49 +66,108 @@ async function handleLogout() {
 
 <style scoped>
 .sidebar {
-  width: 220px;
-  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+  min-height: calc(100vh - 36px);
   display: flex;
   flex-direction: column;
-  padding: 20px 12px;
-  border-right: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+  padding: 18px;
+  overflow: hidden;
 }
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 8px 24px;
+  gap: 12px;
+  padding: 0 2px 18px;
   border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
   margin-bottom: 16px;
 }
-.brand-orb {
-  width: 36px; height: 36px;
-  background: linear-gradient(135deg, #f38020, #f68c22);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; color: #fff;
+.brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: linear-gradient(145deg, var(--primary), var(--primary-strong));
+  box-shadow: 0 10px 22px rgba(42, 109, 246, 0.28);
 }
-.brand-text { font-size: 16px; font-weight: 600; }
-.sidebar-nav { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.brand-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.brand-kicker {
+  color: var(--text-secondary, #647693);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.brand-text {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  padding: 10px 14px;
-  border-radius: 10px;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
   text-decoration: none;
-  color: var(--text-secondary, #999);
+  color: var(--text-secondary, #647693);
   font-size: 14px;
-  transition: all 0.2s;
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) var(--motion-ease),
+    color var(--motion-normal) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-pop);
   cursor: pointer;
 }
 .nav-item:hover {
-  background: var(--glass-bg-hover, rgba(255,255,255,0.06));
-  color: inherit;
+  background: var(--glass-bg-hover, rgba(255,255,255,0.74));
+  border-color: var(--line, rgba(92,126,178,0.18));
+  color: var(--text, #1b2b44);
+  transform: translateX(2px);
 }
 .nav-item.active {
-  background: var(--glass-bg-active, rgba(255,255,255,0.1));
-  color: var(--el-color-primary, #f38020);
-  font-weight: 600;
+  background: var(--glass-bg-active, rgba(255,255,255,0.84));
+  border-color: rgba(42, 109, 246, 0.24);
+  color: var(--primary, #2a6df6);
+  font-weight: 700;
+  box-shadow: var(--shadow-soft, 0 10px 28px rgba(50, 80, 130, 0.10));
+  transform: none;
+}
+.nav-indicator {
+  width: 5px;
+  height: 18px;
+  border-radius: 999px;
+  background: transparent;
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-pop);
+}
+.nav-item.active .nav-indicator {
+  background: var(--primary, #2a6df6);
+  box-shadow: 0 0 12px rgba(42, 109, 246, 0.32);
+}
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sidebar-footer {
   display: flex;
@@ -114,5 +175,32 @@ async function handleLogout() {
   gap: 8px;
   padding-top: 16px;
   border-top: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+}
+.theme-toggle,
+.logout-button {
+  width: 100%;
+  justify-content: flex-start;
+  border-radius: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-item,
+  .nav-indicator {
+    transition: none;
+  }
+  .nav-item:hover {
+    transform: none;
+  }
+}
+@media (max-width: 900px) {
+  .sidebar {
+    min-height: auto;
+  }
+  .sidebar-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  }
+  .sidebar-footer {
+    flex-direction: row;
+  }
 }
 </style>

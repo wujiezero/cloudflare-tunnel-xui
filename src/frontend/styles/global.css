@@ -59,6 +59,20 @@
   /* Easing */
   --spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-pop: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-fast: 150ms;
+  --motion-normal: 220ms;
+  --motion-slow: 300ms;
+
+  /* Shared app surfaces */
+  --surface-radius: 16px;
+  --surface-radius-sm: 12px;
+  --glass-bg: var(--panel);
+  --glass-bg-hover: rgba(255, 255, 255, 0.74);
+  --glass-bg-active: rgba(255, 255, 255, 0.84);
+  --glass-border: var(--line);
+  --text-secondary: var(--muted);
 }
 
 /* ─────────────────────────────────────────────
@@ -279,6 +293,104 @@ button,
 input,
 textarea {
   font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(42, 109, 246, 0.50);
+  outline-offset: 3px;
+}
+
+/* ─────────────────────────────────────────────
+   Shared layout and motion primitives
+   ───────────────────────────────────────────── */
+.page-shell {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  animation: page-enter var(--motion-normal) var(--motion-ease);
+}
+
+.surface-card {
+  position: relative;
+  border: 1px solid var(--glass-border);
+  border-top-color: var(--specular-soft);
+  border-radius: var(--surface-radius);
+  background: linear-gradient(160deg, var(--panel-strong), var(--panel-soft));
+  box-shadow: var(--shadow-soft), var(--inset-highlight), var(--inset-depth);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+.surface-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(255,255,255,0.48), transparent 42%),
+    linear-gradient(135deg, rgba(255,255,255,0.13), transparent 56%);
+  opacity: 0.32;
+}
+
+.interactive-surface {
+  transition:
+    background-color var(--motion-normal) var(--motion-ease),
+    border-color var(--motion-normal) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-pop);
+}
+
+.interactive-surface:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-card), var(--inset-highlight), var(--inset-depth);
+  transform: translateY(-2px);
+}
+
+.toolbar-surface {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--surface-radius);
+  background: var(--panel-soft);
+  box-shadow: var(--shadow-soft), var(--inset-highlight);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+.view-slide-fade-enter-active,
+.view-slide-fade-leave-active {
+  transition:
+    opacity var(--motion-normal) var(--motion-ease),
+    transform var(--motion-normal) var(--motion-ease),
+    filter var(--motion-normal) var(--motion-ease);
+}
+
+.view-slide-fade-enter-from {
+  opacity: 0;
+  filter: blur(6px);
+  transform: translateY(10px) scale(0.992);
+}
+
+.view-slide-fade-leave-to {
+  opacity: 0;
+  filter: blur(4px);
+  transform: translateY(-6px) scale(0.996);
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ─────────────────────────────────────────────

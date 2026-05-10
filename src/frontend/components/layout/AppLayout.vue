@@ -1,7 +1,7 @@
 <template>
-  <div class="app-layout">
+  <div class="app-layout liquid-shell">
     <AppSidebar />
-    <main class="main-area">
+    <main class="main-area scroll-thin">
       <AppTopbar
         :title="route.meta?.title || ''"
         :cloudflared="cloudflaredState.cloudflared"
@@ -10,7 +10,7 @@
       <div class="content-area">
         <GlobalLoading />
         <router-view v-slot="{ Component, route: currentRoute }">
-          <transition name="view-fade" mode="out-in">
+          <transition name="view-slide-fade" mode="out-in" appear>
             <component :is="Component" :key="currentRoute.fullPath" />
           </transition>
         </router-view>
@@ -34,11 +34,17 @@ const { state: tunnelsState } = useTunnels();
 
 <style scoped>
 .app-layout {
-  display: flex;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
+  gap: 18px;
   min-height: 100vh;
+  padding: 18px;
 }
 .main-area {
-  flex: 1;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -46,29 +52,23 @@ const { state: tunnelsState } = useTunnels();
 .content-area {
   position: relative;
   flex: 1;
-  padding: 24px;
+  min-height: 0;
+  padding: 20px 4px 2px 0;
   overflow-y: auto;
-}
-.view-fade-enter-active,
-.view-fade-leave-active {
-  transition: opacity 180ms ease, transform 180ms ease;
-}
-.view-fade-enter-from {
-  opacity: 0;
-  transform: translateY(8px);
-}
-.view-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-4px);
+  transition: padding var(--motion-normal) var(--motion-ease);
 }
 @media (prefers-reduced-motion: reduce) {
-  .view-fade-enter-active,
-  .view-fade-leave-active {
-    transition: none;
+  .content-area {
+    scroll-behavior: auto;
   }
-  .view-fade-enter-from,
-  .view-fade-leave-to {
-    transform: none;
+}
+@media (max-width: 900px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+  .content-area {
+    padding: 12px 0 0;
   }
 }
 </style>
