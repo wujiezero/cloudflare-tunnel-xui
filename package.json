@@ -5,7 +5,12 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "NODE_ENV=development node src/server.js"
+    "dev": "NODE_ENV=development node src/server.js",
+    "dev:client": "vite",
+    "dev:server": "node src/server.js",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.js"
   },
   "keywords": [
     "cloudflare",
@@ -17,10 +22,12 @@
   "license": "MIT",
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.5",
+    "chart.js": "^4.5.1",
     "element-plus": "^2.13.6",
     "express": "^5.1.0",
     "express-session": "^1.18.1",
     "vite": "^8.0.3",
-    "vue": "^3.5.31"
+    "vue": "^3.5.31",
+    "vue-router": "^4.6.4"
   }
 }

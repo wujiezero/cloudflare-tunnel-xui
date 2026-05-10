@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cloudflare Tunnel XUI</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div
+      id="boot-status"
+      hidden
+      style="position:fixed;inset:24px auto auto 24px;z-index:2147483647;padding:10px 14px;border:1px solid rgba(92,126,178,.28);border-radius:10px;background:rgba(255,255,255,.92);color:#1b2b44;font:14px -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 24px rgba(50,80,130,.14);"
+    >前端资源加载中，若持续显示请刷新页面。</div>
+    <script>
+      window.setTimeout(function () {
+        var status = document.getElementById("boot-status");
+        var app = document.getElementById("app");
+        if (status && app && app.children.length === 0) {
+          status.hidden = false;
+        }
+      }, 1500);
+    </script>
+    <script type="module" src="/src/frontend/main.js?v=20260509-1"></script>
+  </body>
+</html>

@@ -220,6 +220,11 @@ async function bootstrap() {
   const host = process.env.HOST || config.server.host;
   const port = Number(process.env.PORT || config.server.port);
   const publicRoot = path.resolve(process.cwd(), "public");
+  const distRoot = path.resolve(process.cwd(), "dist");
+  const useDist = fs.existsSync(path.join(distRoot, "index.html"));
+  if (useDist) {
+    console.log(`Serving frontend from dist/ (production build)`);
+  }
   const app = express();
   const cloudflaredManager = new CloudflaredManager({
     readConfig
@@ -288,7 +293,7 @@ async function bootstrap() {
     next();
   });
 
-  [
+  if (!useDist) { [
     [
       "/vendor/vue.global.prod.js",
       path.resolve(process.cwd(), "node_modules/vue/dist/vue.global.prod.js"),
@@ -314,8 +319,9 @@ async function bootstrap() {
       res.type(type).sendFile(filePath);
     });
   });
+  }
 
-  app.use(express.static(publicRoot));
+  app.use(express.static(useDist ? distRoot : publicRoot));
   app.use(express.json({ limit: "1mb" }));
   app.use(
     session({
@@ -949,7 +955,7 @@ async function bootstrap() {
   });
 
   app.use((_req, res) => {
-    res.sendFile(path.resolve(publicRoot, "index.html"));
+    res.sendFile(path.resolve(useDist ? distRoot : publicRoot, "index.html"));
   });
 
   const sslConfig = config.server.ssl || {};
