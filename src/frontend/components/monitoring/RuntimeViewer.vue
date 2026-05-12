@@ -56,10 +56,12 @@
     <el-empty v-else description="无运行中进程" />
 
     <template #footer>
-      <span class="auto-refresh-label">
-        自动刷新: {{ cfState.statusPollTimer ? '5秒轮询' : '已暂停' }}
-      </span>
-      <el-button @click="visible = false">关闭</el-button>
+      <div class="runtime-dialog-footer">
+        <span class="auto-refresh-label">
+          自动刷新: {{ cfState.statusPollTimer ? '5秒轮询' : '已暂停' }}
+        </span>
+        <el-button class="runtime-close-button" @click="visible = false">关闭</el-button>
+      </div>
     </template>
   </el-dialog>
 </template>
@@ -194,5 +196,30 @@ watch(visible, (val) => {
 }
 .metric-chart-section h4 { margin: 0 0 8px; }
 .mini-preview { font-size: 11px; font-family: "Fira Code", monospace; white-space: pre-wrap; }
-.auto-refresh-label { font-size: 12px; color: var(--text-secondary, #999); }
+.runtime-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  width: 100%;
+  min-height: 44px;
+}
+.auto-refresh-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #999);
+  white-space: nowrap;
+}
+.runtime-close-button {
+  flex: 0 0 auto;
+}
+@media (max-width: 520px) {
+  .runtime-dialog-footer {
+    justify-content: space-between;
+  }
+  .auto-refresh-label {
+    white-space: normal;
+  }
+}
 </style>

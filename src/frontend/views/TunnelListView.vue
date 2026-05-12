@@ -69,7 +69,10 @@
 
     <transition-group v-else-if="filteredTunnels.length" name="list" tag="div" class="tunnel-list">
       <div v-for="t in filteredTunnels" :key="t.id" class="tunnel-card surface-card interactive-surface"
-           :class="{ selected: tunnelsState.tunnelSelection.includes(t.id) }">
+           :class="{
+             selected: tunnelsState.tunnelSelection.includes(t.id),
+             'is-action-running': isTunnelActionPending(t.id)
+           }">
         <div class="tunnel-card-header">
           <el-checkbox
             :model-value="tunnelsState.tunnelSelection.includes(t.id)"
@@ -90,8 +93,17 @@
         </div>
         <div class="tunnel-card-actions">
           <el-button size="small" :type="runningTunnels.has(t.id) ? 'danger' : 'success'"
-                     @click="runningTunnels.has(t.id) ? stopTunnel(t.id) : startTunnel(t.id)">
-            {{ runningTunnels.has(t.id) ? '停止' : '启动' }}
+                     class="tunnel-action-button"
+                     :class="{
+                       'is-starting': actionState.type === 'start' && actionState.tunnelId === t.id,
+                       'is-stopping': actionState.type === 'stop' && actionState.tunnelId === t.id
+                     }"
+                     :loading="isTunnelActionPending(t.id)"
+                     :disabled="isTunnelActionPending(t.id)"
+                     @click="handleTunnelAction(t)">
+            <span class="tunnel-action-label">
+              {{ getTunnelActionLabel(t) }}
+            </span>
           </el-button>
           <el-button size="small" @click="handleOpenLogs(t)">日志</el-button>
           <el-button size="small" @click="handleEdit(t.id)">编辑</el-button>
@@ -142,6 +154,7 @@ const importJson = ref("");
 const importing = ref(false);
 const exporting = ref(false);
 const showRuntime = ref(false);
+const actionState = ref({ tunnelId: null, type: "" });
 const showSkeleton = computed(() => tunnelsState.tunnelsLoading && !tunnelsState.tunnels.length);
 
 const runningTunnels = computed(() => {
@@ -190,6 +203,32 @@ async function batchStop() {
 
 async function batchDelete() {
   await batchAction("delete");
+}
+
+function isTunnelActionPending(tunnelId) {
+  return actionState.value.tunnelId === tunnelId;
+}
+
+function getTunnelActionLabel(tunnel) {
+  if (actionState.value.tunnelId === tunnel.id) {
+    return actionState.value.type === "start" ? "启动中" : "停止中";
+  }
+  return runningTunnels.value.has(tunnel.id) ? "停止" : "启动";
+}
+
+async function handleTunnelAction(tunnel) {
+  if (isTunnelActionPending(tunnel.id)) return;
+  const type = runningTunnels.value.has(tunnel.id) ? "stop" : "start";
+  actionState.value = { tunnelId: tunnel.id, type };
+  try {
+    if (type === "stop") {
+      await stopTunnel(tunnel.id);
+    } else {
+      await startTunnel(tunnel.id);
+    }
+  } finally {
+    actionState.value = { tunnelId: null, type: "" };
+  }
 }
 
 function handleOpenLogs(tunnel) {
@@ -324,6 +363,13 @@ onMounted(loadTunnels);
   transform: translateY(-1px);
   box-shadow: var(--shadow-soft, 0 10px 28px rgba(50, 80, 130, 0.10));
 }
+.tunnel-card.is-action-running {
+  border-color: rgba(64, 158, 255, 0.38);
+  background:
+    radial-gradient(circle at 18px 18px, rgba(64, 158, 255, 0.16), transparent 28px),
+    var(--glass-bg-hover, rgba(255,255,255,0.07));
+  box-shadow: var(--shadow-soft, 0 10px 28px rgba(50, 80, 130, 0.10)), 0 0 0 1px rgba(64, 158, 255, 0.10);
+}
 .tunnel-card.selected { border-color: var(--el-color-primary, #f38020); }
 .tunnel-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .tunnel-name { font-weight: 600; font-size: 15px; flex: 1; }
@@ -335,7 +381,30 @@ onMounted(loadTunnels);
   font-size: 12px;
 }
 .mapping-more { font-size: 12px; color: var(--text-secondary, #999); }
-.tunnel-card-actions { display: flex; gap: 6px; }
+.tunnel-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.tunnel-action-button {
+  position: relative;
+  overflow: hidden;
+  min-width: 68px;
+  transition: transform 180ms ease, box-shadow 180ms ease, opacity 180ms ease;
+}
+.tunnel-action-button:not(.is-disabled):active {
+  transform: scale(0.96);
+}
+.tunnel-action-button.is-starting::after,
+.tunnel-action-button.is-stopping::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.32), transparent);
+  transform: translateX(-110%);
+  animation: tunnel-action-sweep 1.05s ease-in-out infinite;
+}
+.tunnel-action-label {
+  position: relative;
+  z-index: 1;
+}
 .list-enter-active,
 .list-leave-active {
   transition: opacity 180ms ease, transform 180ms ease;
@@ -351,8 +420,13 @@ onMounted(loadTunnels);
 @keyframes skeleton-shimmer {
   100% { transform: translateX(100%); }
 }
+@keyframes tunnel-action-sweep {
+  100% { transform: translateX(110%); }
+}
 @media (prefers-reduced-motion: reduce) {
   .tunnel-card,
+  .tunnel-action-button,
+  .tunnel-action-button::after,
   .list-enter-active,
   .list-leave-active,
   .inline-spinner,

@@ -79,6 +79,27 @@ test("tunnel list uses skeleton loading instead of a full page loading mask", ()
   assert.match(tunnelList, /skeleton-tunnel-card/);
 });
 
+test("tunnel start and stop actions expose pending motion state", () => {
+  const tunnelList = read("src/frontend/views/TunnelListView.vue");
+
+  assert.match(tunnelList, /actionState\s*=\s*ref/);
+  assert.match(tunnelList, /handleTunnelAction\(t\)/);
+  assert.match(tunnelList, /is-action-running/);
+  assert.match(tunnelList, /tunnel-action-sweep/);
+  assert.match(tunnelList, /prefers-reduced-motion:\s*reduce/);
+});
+
+test("runtime dialog footer uses a non-overlapping flex layout", () => {
+  const runtimeViewer = read("src/frontend/components/monitoring/RuntimeViewer.vue");
+  const globalCss = read("src/frontend/styles/global.css");
+
+  assert.match(runtimeViewer, /runtime-dialog-footer/);
+  assert.match(runtimeViewer, /runtime-close-button/);
+  assert.match(runtimeViewer, /white-space:\s*nowrap/);
+  assert.match(globalCss, /\.runtime-dialog \.el-dialog__footer\s*\{[^}]*display:\s*flex/s);
+  assert.match(globalCss, /\.glass-dialog\.runtime-dialog \.el-dialog__footer/);
+});
+
 test("initial dashboard hydration does not trigger the global content overlay", () => {
   const app = read("src/frontend/App.vue");
 
