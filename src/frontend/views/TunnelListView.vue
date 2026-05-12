@@ -137,6 +137,7 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
+import { ElMessageBox } from "element-plus";
 import { useTunnels } from "../composables/useTunnels.js";
 import { useCloudflared } from "../composables/useCloudflared.js";
 import { useApi } from "../composables/useApi.js";
@@ -197,6 +198,11 @@ async function batchStart() {
 }
 
 async function batchStop() {
+  const confirmed = await confirmStopAction({
+    title: "确认批量停止",
+    message: `将停止已选择的 ${tunnelsState.tunnelSelection.length} 个 Tunnel 进程。`
+  });
+  if (!confirmed) return;
   await batchAction("stop");
   await refreshRuntimeStatus();
 }
@@ -216,9 +222,29 @@ function getTunnelActionLabel(tunnel) {
   return runningTunnels.value.has(tunnel.id) ? "停止" : "启动";
 }
 
+async function confirmStopAction({ title, message }) {
+  try {
+    await ElMessageBox.confirm(message, title, {
+      confirmButtonText: "确认停止",
+      cancelButtonText: "取消",
+      type: "warning"
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 async function handleTunnelAction(tunnel) {
   if (isTunnelActionPending(tunnel.id)) return;
   const type = runningTunnels.value.has(tunnel.id) ? "stop" : "start";
+  if (type === "stop") {
+    const confirmed = await confirmStopAction({
+      title: "确认停止 Tunnel",
+      message: `将停止 Tunnel「${tunnel.name || tunnel.id}」的本机 cloudflared 进程。`
+    });
+    if (!confirmed) return;
+  }
   actionState.value = { tunnelId: tunnel.id, type };
   try {
     if (type === "stop") {

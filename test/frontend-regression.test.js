@@ -71,6 +71,29 @@ test("dashboard uses skeleton loading instead of a full loading mask", () => {
   assert.match(dashboard, /skeleton-card/);
 });
 
+test("dashboard page uses one spacing system for cards and sections", () => {
+  const dashboard = read("src/frontend/views/DashboardView.vue");
+
+  assert.match(dashboard, /--dashboard-gap:\s*20px/);
+  assert.match(dashboard, /--dashboard-card-gap:\s*16px/);
+  assert.match(dashboard, /\.dashboard-page\s*\{[^}]*gap:\s*var\(--dashboard-gap\)/s);
+  assert.match(dashboard, /\.status-grid\s*\{[^}]*margin:\s*0/s);
+  assert.match(dashboard, /\.chart-section\s*\{[^}]*margin:\s*0/s);
+  assert.match(dashboard, /\.tunnel-overview\s*\{[^}]*gap:\s*var\(--dashboard-card-gap\)/s);
+  assert.doesNotMatch(dashboard, /<el-divider\s*\/>/);
+});
+
+test("authenticated shell bounds the viewport and scrolls inside content area", () => {
+  const layout = read("src/frontend/components/layout/AppLayout.vue");
+
+  assert.match(layout, /\.app-layout\s*\{[^}]*height:\s*100vh/s);
+  assert.match(layout, /\.app-layout\s*\{[^}]*overflow:\s*hidden/s);
+  assert.match(layout, /\.content-area\s*\{[^}]*min-height:\s*0/s);
+  assert.match(layout, /\.content-area\s*\{[^}]*overflow-y:\s*auto/s);
+  assert.match(layout, /\.content-area\s*\{[^}]*overscroll-behavior:\s*contain/s);
+  assert.match(layout, /\.content-area\s*\{[^}]*padding:\s*20px 4px 24px 0/s);
+});
+
 test("tunnel list uses skeleton loading instead of a full page loading mask", () => {
   const tunnelList = read("src/frontend/views/TunnelListView.vue");
 
@@ -89,6 +112,20 @@ test("tunnel start and stop actions expose pending motion state", () => {
   assert.match(tunnelList, /prefers-reduced-motion:\s*reduce/);
 });
 
+test("stop actions require explicit confirmation before execution", () => {
+  const tunnelList = read("src/frontend/views/TunnelListView.vue");
+  const runtimeViewer = read("src/frontend/components/monitoring/RuntimeViewer.vue");
+  const tunnels = read("src/frontend/composables/useTunnels.js");
+
+  assert.match(tunnelList, /ElMessageBox/);
+  assert.match(tunnelList, /confirmStopAction/);
+  assert.match(tunnelList, /确认停止 Tunnel/);
+  assert.match(tunnelList, /确认批量停止/);
+  assert.match(runtimeViewer, /ElMessageBox/);
+  assert.match(runtimeViewer, /确认停止 Tunnel/);
+  assert.match(tunnels, /tunnelIds:\s*ids/);
+});
+
 test("runtime dialog footer uses a non-overlapping flex layout", () => {
   const runtimeViewer = read("src/frontend/components/monitoring/RuntimeViewer.vue");
   const globalCss = read("src/frontend/styles/global.css");
@@ -98,6 +135,55 @@ test("runtime dialog footer uses a non-overlapping flex layout", () => {
   assert.match(runtimeViewer, /white-space:\s*nowrap/);
   assert.match(globalCss, /\.runtime-dialog \.el-dialog__footer\s*\{[^}]*display:\s*flex/s);
   assert.match(globalCss, /\.glass-dialog\.runtime-dialog \.el-dialog__footer/);
+});
+
+test("runtime metrics viewer exposes manual and timed refresh intervals", () => {
+  const runtimeViewer = read("src/frontend/components/monitoring/RuntimeViewer.vue");
+
+  assert.match(runtimeViewer, /METRICS_REFRESH_OPTIONS/);
+  assert.match(runtimeViewer, /value:\s*0,\s*label:\s*"手动"/);
+  for (const interval of [1000, 3000, 5000, 10000, 30000, 60000]) {
+    assert.match(runtimeViewer, new RegExp(`value:\\s*${interval}`));
+  }
+  assert.match(runtimeViewer, /metricsRefreshTimer/);
+  assert.match(runtimeViewer, /startMetricsRefreshTimer/);
+  assert.match(runtimeViewer, /clearMetricsRefreshTimer/);
+  assert.match(runtimeViewer, /runtime-refresh-select/);
+});
+
+test("runtime log viewer supports timed refresh and pausable auto scroll", () => {
+  const runtimeViewer = read("src/frontend/components/monitoring/RuntimeViewer.vue");
+  const cloudflared = read("src/cloudflared-manager.js");
+  const formatters = read("src/frontend/utils/formatters.js");
+
+  assert.match(runtimeViewer, /LOG_REFRESH_OPTIONS/);
+  assert.match(runtimeViewer, /value:\s*0,\s*label:\s*"手动"/);
+  for (const interval of [1000, 3000, 5000, 10000, 30000, 60000]) {
+    assert.match(runtimeViewer, new RegExp(`value:\\s*${interval}`));
+  }
+  assert.match(runtimeViewer, /logRefreshTimer/);
+  assert.match(runtimeViewer, /logAutoScroll/);
+  assert.match(runtimeViewer, /scrollLogToBottom/);
+  assert.match(runtimeViewer, /runtime-log-autoscroll/);
+  assert.match(cloudflared, /maxLines\s*=\s*1000/);
+  assert.match(cloudflared, /maxBytes\s*=\s*512\s*\*\s*1024/);
+  assert.match(formatters, /mergeLineSnapshots\(prev,\s*next,\s*maxLines\s*=\s*1000\)/);
+  assert.doesNotMatch(formatters, /return\s+next\.slice\(overlapStart\)/);
+});
+
+test("metrics parser supports current and legacy cloudflared metric names", () => {
+  const formatters = read("src/frontend/utils/formatters.js");
+  const chart = read("src/frontend/components/monitoring/MetricsChart.vue");
+
+  assert.match(formatters, /cloudflared_tunnel_active_connections/);
+  assert.match(formatters, /cloudflared_tunnel_requests/);
+  assert.match(formatters, /cloudflared_tunnel_request_errors/);
+  assert.match(formatters, /cloudflared_tunnel_total_bytes/);
+  assert.match(formatters, /cloudflared_tunnel_received_bytes/);
+  assert.match(formatters, /process_start_time_seconds/);
+  assert.doesNotMatch(formatters, /activeConnections:\s*metrics\.activeConnections\s*\|\|/);
+  assert.match(chart, /parseMetricNumber/);
+  assert.match(chart, /KB:\s*1024/);
 });
 
 test("initial dashboard hydration does not trigger the global content overlay", () => {

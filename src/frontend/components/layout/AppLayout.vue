@@ -37,14 +37,18 @@ const { state: tunnelsState } = useTunnels();
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   gap: 18px;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   padding: 18px;
+  overflow: hidden;
 }
 .main-area {
   position: relative;
   z-index: 1;
   min-width: 0;
   min-height: 0;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -53,8 +57,9 @@ const { state: tunnelsState } = useTunnels();
   position: relative;
   flex: 1;
   min-height: 0;
-  padding: 20px 4px 2px 0;
+  padding: 20px 4px 24px 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   transition: padding var(--motion-normal) var(--motion-ease);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -68,7 +73,7 @@ const { state: tunnelsState } = useTunnels();
     padding: 12px;
   }
   .content-area {
-    padding: 12px 0 0;
+    padding: 12px 0 24px;
   }
 }
 </style>
