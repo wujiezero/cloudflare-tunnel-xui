@@ -35,46 +35,48 @@
         </div>
       </transition-group>
 
-      <div v-if="cfState.runtimeMetricsHistory.length > 1" class="chart-section surface-card">
-        <h3>实时指标</h3>
+      <section v-if="cfState.runtimeMetricsHistory.length > 1" class="chart-section surface-card">
+        <h3 class="dashboard-section-title">实时指标</h3>
         <div class="chart-row">
           <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="activeConnections" label="连接数" color="#67c23a" />
           <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesUp" label="上行(B)" color="#409eff" />
         </div>
-      </div>
+      </section>
 
-      <el-divider />
-      <h3>Tunnel 快速概览</h3>
-      <div v-if="tunnels.length" class="tunnel-overview">
-        <div
-          v-for="t in tunnels.slice(0, 6)"
-          :key="t.id"
-          class="overview-card surface-card interactive-surface clickable"
-          @click="router.push(`/tunnels/${t.id}/edit`)"
-        >
-          <div class="overview-header">
-            <span class="overview-name">{{ t.name }}</span>
-            <div class="overview-badges">
-              <el-tag :type="runningTunnels.has(t.id) ? 'success' : 'info'" size="small">
-                {{ runningTunnels.has(t.id) ? '运行中' : '已停止' }}
-              </el-tag>
-              <span class="conn-count">{{ t.connections || 0 }} 连接</span>
+      <section class="dashboard-section">
+        <div class="dashboard-divider"></div>
+        <h3 class="dashboard-section-title">Tunnel 快速概览</h3>
+        <div v-if="tunnels.length" class="tunnel-overview">
+          <div
+            v-for="t in tunnels.slice(0, 6)"
+            :key="t.id"
+            class="overview-card surface-card interactive-surface clickable"
+            @click="router.push(`/tunnels/${t.id}/edit`)"
+          >
+            <div class="overview-header">
+              <span class="overview-name">{{ t.name }}</span>
+              <div class="overview-badges">
+                <el-tag :type="runningTunnels.has(t.id) ? 'success' : 'info'" size="small">
+                  {{ runningTunnels.has(t.id) ? '运行中' : '已停止' }}
+                </el-tag>
+                <span class="conn-count">{{ t.connections || 0 }} 连接</span>
+              </div>
+            </div>
+            <div class="overview-mappings">
+              <span v-for="m in (t.configuration?.mappings || []).slice(0, 2)" :key="m.hostname || m.service" class="mapping-chip">
+                {{ m.hostname || m.service || '(默认)' }}
+              </span>
+              <span v-if="(t.configuration?.mappings || []).length > 2" class="mapping-more">
+                +{{ (t.configuration?.mappings || []).length - 2 }}
+              </span>
             </div>
           </div>
-          <div class="overview-mappings">
-            <span v-for="m in (t.configuration?.mappings || []).slice(0, 2)" :key="m.hostname || m.service" class="mapping-chip">
-              {{ m.hostname || m.service || '(默认)' }}
-            </span>
-            <span v-if="(t.configuration?.mappings || []).length > 2" class="mapping-more">
-              +{{ (t.configuration?.mappings || []).length - 2 }}
-            </span>
+          <div v-if="tunnels.length > 6" class="view-all-card surface-card interactive-surface" @click="router.push('/tunnels')">
+            查看全部 {{ tunnels.length }} 个 Tunnel →
           </div>
         </div>
-        <div v-if="tunnels.length > 6" class="view-all-card surface-card interactive-surface" @click="router.push('/tunnels')">
-          查看全部 {{ tunnels.length }} 个 Tunnel →
-        </div>
-      </div>
-      <el-empty v-else-if="!tunnelsLoading" description="暂无 Tunnel" />
+        <el-empty v-else-if="!tunnelsLoading" description="暂无 Tunnel" />
+      </section>
     </template>
   </div>
 </template>
@@ -122,13 +124,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.dashboard-page {
+  --dashboard-gap: 20px;
+  --dashboard-card-gap: 16px;
+  gap: var(--dashboard-gap);
+  padding-bottom: 24px;
+}
 .status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: var(--dashboard-card-gap);
+  margin: 0;
 }
 .dashboard-skeleton {
+  display: grid;
+  gap: var(--dashboard-gap);
   animation: skeleton-enter 180ms ease-out;
 }
 .signal-card {
@@ -188,7 +198,7 @@ onMounted(async () => {
 .skeleton-heading {
   width: 150px;
   height: 16px;
-  margin: 28px 0 14px;
+  margin: 0;
 }
 .skeleton-overview {
   min-height: 88px;
@@ -218,14 +228,36 @@ onMounted(async () => {
 .signal-dot.warn { background: #e6a23c; }
 .signal-label { font-size: 12px; color: var(--text-secondary, #999); }
 .signal-value { font-size: 14px; font-weight: 500; margin-top: 2px; }
-.chart-section { padding: 20px; border-radius: 16px; margin-bottom: 16px; }
-.chart-section h3 { margin: 0 0 16px; font-size: 16px; }
-.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-h3 { margin: 0 0 12px; font-size: 16px; }
+.dashboard-section,
+.chart-section {
+  display: grid;
+  gap: var(--dashboard-card-gap);
+  min-width: 0;
+}
+.chart-section {
+  padding: 20px;
+  border-radius: 16px;
+  margin: 0;
+}
+.dashboard-section-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.35;
+}
+.dashboard-divider {
+  height: 1px;
+  margin: 0;
+  background: var(--line, rgba(92, 126, 178, 0.18));
+}
+.chart-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--dashboard-card-gap);
+}
 .tunnel-overview {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  gap: var(--dashboard-card-gap);
 }
 .overview-card {
   padding: 16px;
@@ -277,6 +309,11 @@ h3 { margin: 0 0 12px; font-size: 16px; }
 @keyframes skeleton-enter {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 900px) {
+  .chart-row {
+    grid-template-columns: 1fr;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .signal-card,

@@ -324,7 +324,7 @@ class CloudflaredManager {
     };
   }
 
-  async readRecentLogs(logPath, { maxLines = 80, maxBytes = 64 * 1024 } = {}) {
+  async readRecentLogs(logPath, { maxLines = 1000, maxBytes = 512 * 1024 } = {}) {
     try {
       const handle = await fsp.open(logPath, "r");
 

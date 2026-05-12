@@ -22,6 +22,43 @@
           <el-radio-button value="metrics">指标</el-radio-button>
         </el-radio-group>
         <div class="viewer-actions">
+          <el-select
+            v-if="cfState.runtimeViewerMode === 'logs'"
+            v-model="logRefreshInterval"
+            size="small"
+            class="runtime-refresh-select"
+            @change="handleLogRefreshIntervalChange"
+          >
+            <el-option
+              v-for="option in LOG_REFRESH_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
+          <el-switch
+            v-if="cfState.runtimeViewerMode === 'logs'"
+            v-model="logAutoScroll"
+            size="small"
+            class="runtime-log-autoscroll"
+            active-text="跟随底部"
+            inactive-text="暂停滚动"
+            @change="handleLogAutoScrollChange"
+          />
+          <el-select
+            v-if="cfState.runtimeViewerMode === 'metrics'"
+            v-model="metricsRefreshInterval"
+            size="small"
+            class="runtime-refresh-select"
+            @change="handleMetricsRefreshIntervalChange"
+          >
+            <el-option
+              v-for="option in METRICS_REFRESH_OPTIONS"
+              :key="option.value"
+              :label="option.label"
+              :value="option.value"
+            />
+          </el-select>
           <el-button size="small" @click="handleStop">停止</el-button>
           <el-button size="small" @click="handleClearLogs">清除日志</el-button>
           <el-button size="small" @click="handleRefresh">刷新</el-button>
@@ -30,13 +67,13 @@
 
       <!-- Content area -->
       <div v-if="cfState.runtimeViewerMode === 'logs'" class="runtime-textarea-wrapper">
-        <el-input
-          :model-value="cfState.runtimeLogDisplay"
-          type="textarea"
-          :rows="15"
+        <textarea
+          ref="logTextareaRef"
+          :value="cfState.runtimeLogDisplay"
           readonly
-          class="runtime-textarea"
-        />
+          class="runtime-textarea runtime-log-textarea"
+          @scroll="handleLogScroll"
+        ></textarea>
       </div>
 
       <div v-else class="metrics-grid">
@@ -58,7 +95,7 @@
     <template #footer>
       <div class="runtime-dialog-footer">
         <span class="auto-refresh-label">
-          自动刷新: {{ cfState.statusPollTimer ? '5秒轮询' : '已暂停' }}
+          {{ cfState.runtimeViewerMode === 'metrics' ? `指标刷新: ${selectedMetricsRefreshLabel}` : `日志刷新: ${selectedLogRefreshLabel} · ${logAutoScroll ? '跟随底部' : '滚动暂停'}` }}
         </span>
         <el-button class="runtime-close-button" @click="visible = false">关闭</el-button>
       </div>
@@ -67,11 +104,31 @@
 </template>
 
 <script setup>
-import { computed, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { ElMessageBox } from "element-plus";
 import { useCloudflared } from "../../composables/useCloudflared.js";
 import { useApi } from "../../composables/useApi.js";
 import MetricsChart from "./MetricsChart.vue";
 import { parseMetricsText, formatJson } from "../../utils/formatters.js";
+
+const METRICS_REFRESH_OPTIONS = [
+  { value: 0, label: "手动" },
+  { value: 1000, label: "1s" },
+  { value: 3000, label: "3s" },
+  { value: 5000, label: "5s" },
+  { value: 10000, label: "10s" },
+  { value: 30000, label: "30s" },
+  { value: 60000, label: "60s" }
+];
+const LOG_REFRESH_OPTIONS = [
+  { value: 0, label: "手动" },
+  { value: 1000, label: "1s" },
+  { value: 3000, label: "3s" },
+  { value: 5000, label: "5s" },
+  { value: 10000, label: "10s" },
+  { value: 30000, label: "30s" },
+  { value: 60000, label: "60s" }
+];
 
 const props = defineProps({
   modelValue: Boolean
@@ -86,6 +143,19 @@ const visible = computed({
   get: () => props.modelValue,
   set: (val) => emit("update:modelValue", val)
 });
+
+const metricsRefreshInterval = ref(0);
+const metricsRefreshTimer = ref(null);
+const logRefreshInterval = ref(5000);
+const logRefreshTimer = ref(null);
+const logAutoScroll = ref(true);
+const logTextareaRef = ref(null);
+const selectedMetricsRefreshLabel = computed(() => (
+  METRICS_REFRESH_OPTIONS.find((option) => option.value === metricsRefreshInterval.value)?.label || "手动"
+));
+const selectedLogRefreshLabel = computed(() => (
+  LOG_REFRESH_OPTIONS.find((option) => option.value === logRefreshInterval.value)?.label || "手动"
+));
 
 const metricsCards = computed(() => {
   const last = cfState.runtimeMetricsHistory?.[cfState.runtimeMetricsHistory.length - 1]?.parsed;
@@ -122,6 +192,15 @@ function selectProcess(tunnelId) {
 
 async function handleStop() {
   if (!cfState.selectedRuntimeTunnelId) return;
+  try {
+    await ElMessageBox.confirm("将停止当前 Tunnel 的本机 cloudflared 进程。", "确认停止 Tunnel", {
+      confirmButtonText: "确认停止",
+      cancelButtonText: "取消",
+      type: "warning"
+    });
+  } catch (_) {
+    return;
+  }
   await stopTunnel(cfState.selectedRuntimeTunnelId);
 }
 
@@ -132,6 +211,7 @@ async function handleClearLogs() {
   });
   cfState.runtimeLogLines = [];
   cfState.runtimeLogDisplay = "日志已清除。";
+  await scrollLogToBottom();
 }
 
 async function handleRefresh() {
@@ -142,11 +222,122 @@ async function handleRefresh() {
   }
 }
 
+function clearMetricsRefreshTimer() {
+  if (metricsRefreshTimer.value) {
+    clearInterval(metricsRefreshTimer.value);
+    metricsRefreshTimer.value = null;
+  }
+}
+
+function clearLogRefreshTimer() {
+  if (logRefreshTimer.value) {
+    clearInterval(logRefreshTimer.value);
+    logRefreshTimer.value = null;
+  }
+}
+
+function shouldAutoRefreshMetrics() {
+  return visible.value &&
+    cfState.runtimeViewerMode === "metrics" &&
+    Boolean(cfState.selectedRuntimeTunnelId) &&
+    metricsRefreshInterval.value > 0;
+}
+
+function shouldAutoRefreshLogs() {
+  return visible.value &&
+    cfState.runtimeViewerMode === "logs" &&
+    Boolean(cfState.selectedRuntimeTunnelId) &&
+    logRefreshInterval.value > 0;
+}
+
+function startMetricsRefreshTimer() {
+  clearMetricsRefreshTimer();
+  if (!shouldAutoRefreshMetrics()) return;
+  metricsRefreshTimer.value = setInterval(() => {
+    refreshSelectedMetrics({ silent: true });
+  }, metricsRefreshInterval.value);
+}
+
+function startLogRefreshTimer() {
+  clearLogRefreshTimer();
+  if (!shouldAutoRefreshLogs()) return;
+  logRefreshTimer.value = setInterval(() => {
+    refreshSelectedLogs({ silent: true });
+  }, logRefreshInterval.value);
+}
+
+function handleMetricsRefreshIntervalChange() {
+  startMetricsRefreshTimer();
+  if (shouldAutoRefreshMetrics()) {
+    refreshSelectedMetrics({ silent: true });
+  }
+}
+
+function handleLogRefreshIntervalChange() {
+  startLogRefreshTimer();
+  if (shouldAutoRefreshLogs()) {
+    refreshSelectedLogs({ silent: true });
+  }
+}
+
+async function scrollLogToBottom() {
+  if (!logAutoScroll.value || cfState.runtimeViewerMode !== "logs") return;
+  await nextTick();
+  const textarea = logTextareaRef.value;
+  if (!textarea) return;
+  textarea.scrollTop = textarea.scrollHeight;
+}
+
+function handleLogScroll() {
+  const textarea = logTextareaRef.value;
+  if (!textarea || !logAutoScroll.value) return;
+  const distanceToBottom = textarea.scrollHeight - textarea.scrollTop - textarea.clientHeight;
+  if (distanceToBottom > 48) {
+    logAutoScroll.value = false;
+  }
+}
+
+function handleLogAutoScrollChange(value) {
+  if (value) {
+    scrollLogToBottom();
+  }
+}
+
 // Auto-refresh when dialog opens
 watch(visible, (val) => {
   if (val && cfState.selectedRuntimeTunnelId) {
     refreshCurrentRuntimeViewer();
   }
+  if (!val) {
+    clearMetricsRefreshTimer();
+    clearLogRefreshTimer();
+    return;
+  }
+  startMetricsRefreshTimer();
+  startLogRefreshTimer();
+});
+
+watch(() => cfState.runtimeViewerMode, () => {
+  if (visible.value && cfState.selectedRuntimeTunnelId) {
+    refreshCurrentRuntimeViewer();
+  }
+  startMetricsRefreshTimer();
+  startLogRefreshTimer();
+});
+
+watch(() => cfState.selectedRuntimeTunnelId, () => {
+  if (visible.value && cfState.selectedRuntimeTunnelId) {
+    refreshCurrentRuntimeViewer();
+  }
+  startMetricsRefreshTimer();
+  startLogRefreshTimer();
+});
+
+watch(() => cfState.runtimeLogDisplay, scrollLogToBottom, { flush: "post" });
+
+onBeforeUnmount(() => {
+  clearMetricsRefreshTimer();
+  clearLogRefreshTimer();
 });
 </script>
 
@@ -161,17 +352,43 @@ watch(visible, (val) => {
 .viewer-controls {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
 }
-.viewer-actions { display: flex; gap: 6px; }
+.viewer-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.runtime-refresh-select {
+  width: 98px;
+}
+.runtime-log-autoscroll {
+  min-height: 24px;
+}
 .runtime-textarea-wrapper {
   max-height: 400px;
   overflow-y: auto;
 }
-.runtime-textarea :deep(textarea) {
+.runtime-log-textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 400px;
+  resize: vertical;
+  border: 1px solid rgba(92, 126, 178, 0.28);
+  border-radius: 8px;
+  padding: 12px 14px;
   font-family: "Fira Code", "Menlo", monospace;
   font-size: 12px;
   line-height: 1.6;
   background: rgba(0,0,0,0.15);
   color: #e0e0e0;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(92, 126, 178, 0.20) transparent;
+}
+.runtime-log-textarea::-webkit-scrollbar {
+  width: 8px;
+}
+.runtime-log-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+.runtime-log-textarea::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(92, 126, 178, 0.22);
 }
 
 .metrics-grid {

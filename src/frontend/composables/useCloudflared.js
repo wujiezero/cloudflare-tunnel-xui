@@ -78,9 +78,6 @@ export function useCloudflared() {
       state.lastRuntimeRefreshAt = new Date().toISOString();
       state.pollFailCount = 0;
       ensureSelectedProcess();
-      if (state.runtimeLogVisible && state.selectedRuntimeTunnelId) {
-        await refreshCurrentRuntimeViewer({ silent: true });
-      }
     } catch (_error) {
       state.pollFailCount += 1;
       if (state.pollFailCount === 3) {

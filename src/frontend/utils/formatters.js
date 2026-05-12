@@ -11,34 +11,71 @@ export function parseMetricsText(text) {
   if (!text || typeof text !== "string") {
     return { activeConnections: "—", bytesUp: "—", bytesDown: "—", totalRequests: "—", errors: "—", uptime: "—" };
   }
-  const lines = text.split("\n");
-  const metrics = {};
+  const samples = text.split("\n").flatMap((line) => {
+    if (line.startsWith("#") || !line.trim()) return [];
+    const match = line.trim().match(/^([a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{[^}]*\})?\s+([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[-+]?Inf|NaN)\b/);
+    if (!match) return [];
+    const value = Number(match[2]);
+    return Number.isFinite(value) ? [{ name: match[1], value }] : [];
+  });
 
-  for (const line of lines) {
-    if (line.startsWith("#") || !line.trim()) continue;
-    const parts = line.split(/\s+/);
-    const key = parts[0];
-    const value = parts[1];
-    if (!key || value === undefined) continue;
-
-    if (key.includes("tunnel_cloudflared_ha_connections")) metrics.activeConnections = value;
-    else if (key.includes("cloudflared_tunnel_packets_sent")) metrics.bytesUp = formatBytes(Number(value));
-    else if (key.includes("cloudflared_tunnel_packets_received")) metrics.bytesDown = formatBytes(Number(value));
-    else if (key.includes("cloudflared_http_requests_total")) metrics.totalRequests = value;
-    else if (key.includes("cloudflared_tunnel_total_errors")) metrics.errors = value;
-    else if (key.includes("cloudflared_build_info")) {
-      const uptimeMatch = text.match(/process_cpu_seconds_total\s+([\d.]+)/);
-      if (uptimeMatch) metrics.uptime = formatUptime(Number(uptimeMatch[1]));
+  const sumMetric = (names) => {
+    const allowed = new Set(names);
+    let total = 0;
+    let found = false;
+    for (const sample of samples) {
+      if (!allowed.has(sample.name)) continue;
+      total += sample.value;
+      found = true;
     }
+    return found ? total : null;
+  };
+
+  const firstMetric = (names) => {
+    const allowed = new Set(names);
+    return samples.find((sample) => allowed.has(sample.name))?.value ?? null;
+  };
+
+  const activeConnections = sumMetric([
+    "cloudflared_tunnel_active_connections",
+    "cloudflared_tunnel_concurrent_requests_per_tunnel",
+    "cloudflared_tunnel_ha_connections",
+    "tunnel_cloudflared_ha_connections"
+  ]);
+  const bytesUp = sumMetric([
+    "cloudflared_tunnel_total_bytes",
+    "cloudflared_tunnel_bytes_sent",
+    "cloudflared_tunnel_packets_sent"
+  ]);
+  const bytesDown = sumMetric([
+    "cloudflared_tunnel_received_bytes",
+    "cloudflared_tunnel_bytes_received",
+    "cloudflared_tunnel_packets_received"
+  ]);
+  const totalRequests = sumMetric([
+    "cloudflared_tunnel_requests",
+    "cloudflared_tunnel_total_requests",
+    "cloudflared_http_requests_total"
+  ]);
+  const errors = sumMetric([
+    "cloudflared_tunnel_request_errors",
+    "cloudflared_tunnel_total_errors",
+    "cloudflared_tunnel_errors"
+  ]);
+
+  let uptimeSeconds = firstMetric(["cloudflared_tunnel_uptime_secs", "process_uptime_seconds"]);
+  const processStartSeconds = firstMetric(["process_start_time_seconds"]);
+  if (uptimeSeconds === null && processStartSeconds !== null) {
+    uptimeSeconds = Math.max(0, Date.now() / 1000 - processStartSeconds);
   }
 
   return {
-    activeConnections: metrics.activeConnections || "—",
-    bytesUp: metrics.bytesUp || "—",
-    bytesDown: metrics.bytesDown || "—",
-    totalRequests: metrics.totalRequests || "—",
-    errors: metrics.errors || "—",
-    uptime: metrics.uptime || "—"
+    activeConnections: activeConnections === null ? "—" : String(activeConnections),
+    bytesUp: bytesUp === null ? "—" : formatBytes(bytesUp),
+    bytesDown: bytesDown === null ? "—" : formatBytes(bytesDown),
+    totalRequests: totalRequests === null ? "—" : String(totalRequests),
+    errors: errors === null ? "—" : String(errors),
+    uptime: uptimeSeconds === null ? "—" : formatUptime(uptimeSeconds)
   };
 }
 
@@ -76,12 +113,19 @@ export function getMappingsSignature(mappings) {
   return JSON.stringify(normalizeMappings(mappings));
 }
 
-export function mergeLineSnapshots(prev, next) {
+export function mergeLineSnapshots(prev, next, maxLines = 1000) {
   if (!prev.length || !next.length) return next;
-  const prevTail = prev.slice(-100).join("\n");
-  const overlapStart = next.findIndex((line) => prevTail.endsWith(line));
-  if (overlapStart > 0) return next.slice(overlapStart);
-  return next;
+  const maxOverlap = Math.min(prev.length, next.length);
+
+  for (let size = maxOverlap; size > 0; size -= 1) {
+    const prevTail = prev.slice(-size).join("\n");
+    const nextHead = next.slice(0, size).join("\n");
+    if (prevTail === nextHead) {
+      return prev.concat(next.slice(size)).slice(-maxLines);
+    }
+  }
+
+  return prev.concat(next).slice(-maxLines);
 }
 
 export function isLikelyIpHttpsService(service) {

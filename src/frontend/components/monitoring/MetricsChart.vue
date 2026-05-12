@@ -28,10 +28,19 @@ function buildChartData(history) {
   const values = history.map((h) => {
     const v = h?.parsed?.[props.dataKey];
     if (v === "—" || v === undefined) return 0;
-    const num = parseFloat(v);
+    const num = parseMetricNumber(v);
     return Number.isNaN(num) ? 0 : num;
   });
   return { labels, values };
+}
+
+function parseMetricNumber(value) {
+  if (typeof value === "number") return value;
+  const match = String(value).trim().match(/^([\d.]+)\s*(B|KB|MB|GB|TB)?$/i);
+  if (!match) return Number.NaN;
+  const unit = (match[2] || "").toUpperCase();
+  const multipliers = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+  return Number(match[1]) * (multipliers[unit] || 1);
 }
 
 function renderChart() {

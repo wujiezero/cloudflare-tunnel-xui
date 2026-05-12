@@ -174,7 +174,7 @@ export function useTunnels() {
     try {
       const result = await api("/api/tunnels/batch", {
         method: "POST",
-        body: JSON.stringify({ action, ids })
+        body: JSON.stringify({ action, tunnelIds: ids })
       });
       notify(`批量操作完成：${result.success || 0} 个成功${result.failed > 0 ? `，${result.failed} 个失败` : ""}`);
       await loadTunnels();
