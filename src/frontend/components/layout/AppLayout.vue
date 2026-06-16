@@ -4,6 +4,7 @@
     <main class="main-area scroll-thin">
       <AppTopbar
         :title="route.meta?.title || ''"
+        :subtitle="route.meta?.subtitle || ''"
         :cloudflared="cloudflaredState.cloudflared"
         :tunnel-count="tunnelsState.tunnels.length"
       />

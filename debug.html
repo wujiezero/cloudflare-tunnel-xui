@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Debug - Step by Step</title>
+</head>
+<body>
+  <div id="app"><div style="padding:24px;color:#333;font-family:sans-serif">Step 0: HTML loaded. Waiting for Vue...</div></div>
+
+  <script type="module">
+    // Step 1: Test basic Vue mount
+    const appEl = document.getElementById("app");
+    appEl.innerHTML += "<div style='padding:12px;color:green'>Step 1: module script executing ✓</div>";
+
+    try {
+      // Step 2: Import Vue
+      const { createApp, ref, onMounted } = await import("/node_modules/.vite/deps/vue.js?v=a54da345");
+      appEl.innerHTML += "<div style='padding:12px;color:green'>Step 2: Vue imported ✓</div>";
+
+      // Step 3: Import ElementPlus
+      const ElementPlus = (await import("/node_modules/.vite/deps/element-plus.js?v=a54da345")).default;
+      appEl.innerHTML += "<div style='padding:12px;color:green'>Step 3: ElementPlus imported ✓</div>";
+
+      // Step 4: Create a minimal app
+      const MinimalApp = {
+        template: '<div style="padding:24px;background:lightgreen;border-radius:8px;margin:12px;color:#333;font-family:sans-serif"><h2>Step 4: Minimal Vue App Rendered ✓</h2><p>If you see this, Vue + ElementPlus are working.</p><el-button @click="count++">Clicked {{ count }} times</el-button></div>',
+        setup() {
+          const count = ref(0);
+          return { count };
+        }
+      };
+
+      const app = createApp(MinimalApp);
+      app.use(ElementPlus);
+      app.mount("#app");
+
+      appEl.innerHTML += "<div style='padding:12px;color:green'>Step 4: App mounted ✓</div>";
+
+    } catch (err) {
+      appEl.innerHTML += "<div style='padding:24px;margin:24px;border:2px solid red;border-radius:12px;background:#fff3f3;color:#c00;font-family:monospace;font-size:14px;white-space:pre-wrap'><strong>ERROR:</strong> " + err.message + "\n\nStack: " + (err.stack || 'N/A') + "</div>";
+    }
+  </script>
+</body>
+</html>

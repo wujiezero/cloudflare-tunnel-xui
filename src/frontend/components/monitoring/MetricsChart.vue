@@ -14,7 +14,7 @@ const props = defineProps({
   history: { type: Array, default: () => [] },
   dataKey: { type: String, default: "activeConnections" },
   label: { type: String, default: "" },
-  color: { type: String, default: "#f38020" }
+  color: { type: String, default: "#2a6df6" }
 });
 
 const canvasRef = ref(null);

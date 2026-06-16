@@ -4,13 +4,14 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="5864f195-2b2f-4ed3-bc98-5ad6cfaef05a" name="Changes" comment="perf:优化dockerfile">
-      <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-    </list>
+    <list default="true" id="5864f195-2b2f-4ed3-bc98-5ad6cfaef05a" name="Changes" comment="perf: 优化页面交互" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="32" />
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
@@ -27,6 +28,10 @@
       </MavenGeneralSettings>
     </option>
   </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 3
 }</component>
@@ -40,12 +45,19 @@
   <component name="PropertiesComponent">{
   &quot;keyToString&quot;: {
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;main&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
     &quot;last_opened_file_path&quot;: &quot;/Users/jason/Documents/Dev/Codes/Private/cloudflare-tunnel-xui&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
     &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
     &quot;project.structure.proportion&quot;: &quot;0.0&quot;,
@@ -81,6 +93,13 @@
       <workItem from="1775207328718" duration="35000" />
       <workItem from="1775220235629" duration="2000" />
       <workItem from="1775221928801" duration="24000" />
+      <workItem from="1777445183607" duration="9302000" />
+      <workItem from="1777454558601" duration="103000" />
+      <workItem from="1778306199463" duration="16000" />
+      <workItem from="1778385231369" duration="215000" />
+      <workItem from="1778385450287" duration="64000" />
+      <workItem from="1778553322672" duration="2899000" />
+      <workItem from="1779357308271" duration="56000" />
     </task>
     <task id="LOCAL-00001" summary="perf:优化页面">
       <option name="closed" value="true" />
@@ -106,7 +125,63 @@
       <option name="project" value="LOCAL" />
       <updated>1775221948152</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="perf:优化页面效果">
+      <option name="closed" value="true" />
+      <created>1776754724644</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1776754724645</updated>
+    </task>
+    <task id="LOCAL-00005" summary="perf:初始化问题修复">
+      <option name="closed" value="true" />
+      <created>1776755337819</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1776755337819</updated>
+    </task>
+    <task id="LOCAL-00006" summary="perf:页面优化与代码逻辑优化">
+      <option name="closed" value="true" />
+      <created>1777451653229</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1777451653229</updated>
+    </task>
+    <task id="LOCAL-00007" summary="perf: 页面重构">
+      <option name="closed" value="true" />
+      <created>1778385342256</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1778385342256</updated>
+    </task>
+    <task id="LOCAL-00008" summary="fix: 修复docker打包问题">
+      <option name="closed" value="true" />
+      <created>1778553336971</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1778553336971</updated>
+    </task>
+    <task id="LOCAL-00009" summary="perf: 优化页面交互">
+      <option name="closed" value="true" />
+      <created>1778553793612</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1778553793612</updated>
+    </task>
+    <task id="LOCAL-00010" summary="perf: 优化页面交互">
+      <option name="closed" value="true" />
+      <created>1778555515022</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1778555515022</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -126,6 +201,16 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="perf:优化页面" />
     <MESSAGE value="perf:优化dockerfile" />
-    <option name="LAST_COMMIT_MESSAGE" value="perf:优化dockerfile" />
+    <MESSAGE value="perf:优化页面效果" />
+    <MESSAGE value="perf:初始化问题修复" />
+    <MESSAGE value="perf:页面优化与代码逻辑优化" />
+    <MESSAGE value="perf: 页面重构" />
+    <MESSAGE value="fix: 修复docker打包问题" />
+    <MESSAGE value="perf: 优化页面交互" />
+    <option name="LAST_COMMIT_MESSAGE" value="perf: 优化页面交互" />
+  </component>
+  <component name="XSLT-Support.FileAssociations.UIState">
+    <expand />
+    <select />
   </component>
 </project>

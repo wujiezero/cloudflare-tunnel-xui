@@ -2,8 +2,14 @@
   <div class="settings-page page-shell">
     <div class="settings-grid" v-loading="sState.settingsLoading">
       <!-- Cloudflare Credentials Card -->
-      <div class="glass-card surface-card interactive-surface settings-panel" v-loading="saving || testing">
-        <h3>Cloudflare API 凭据</h3>
+      <div class="glass-card surface-card settings-panel" v-loading="saving || testing">
+        <div class="panel-head">
+          <span class="panel-icon"><el-icon><Key /></el-icon></span>
+          <div>
+            <h3 class="section-title">Cloudflare API 凭据</h3>
+            <p class="panel-desc">凭据将以 AES-256-GCM 加密后写回 config.json，不保存明文。</p>
+          </div>
+        </div>
         <el-form label-position="top">
           <el-form-item label="Account ID">
             <el-input v-model="sState.settingsForm.accountId" placeholder="输入 Cloudflare Account ID" />
@@ -12,36 +18,52 @@
             <el-input v-model="sState.settingsForm.apiToken" type="password" show-password placeholder="输入 API Token" />
           </el-form-item>
           <div class="form-actions">
-            <el-button type="primary" @click="handleSave" :loading="saving">保存配置</el-button>
-            <el-button @click="handleTest" :loading="testing">测试 Token 权限</el-button>
+            <el-button type="primary" @click="handleSave" :loading="saving" :icon="Lock">保存配置</el-button>
+            <el-button @click="handleTest" :loading="testing" :icon="MagicStick">测试 Token 权限</el-button>
           </div>
         </el-form>
 
-        <div v-if="sState.configTestData" class="test-result">
-          <h4>Token 检测结果</h4>
-          <div class="permission-grid">
-            <div class="perm-item" v-for="(ready, key) in sState.configTestData.ready || {}" :key="key">
-              <span class="perm-dot" :class="ready ? 'ok' : 'err'"></span>
-              <span>{{ capabilityLabel(key) }}</span>
+        <transition name="collapse-fade">
+          <div v-if="sState.configTestData" class="test-result">
+            <div class="test-result-head"><el-icon><Stamp /></el-icon>Token 检测结果</div>
+            <div class="permission-grid">
+              <div class="perm-item" v-for="(ready, key) in sState.configTestData.ready || {}" :key="key">
+                <el-icon class="perm-mark" :class="ready ? 'ok' : 'err'">
+                  <component :is="ready ? 'CircleCheck' : 'CircleClose'" />
+                </el-icon>
+                <span>{{ capabilityLabel(key) }}</span>
+              </div>
+            </div>
+            <div v-if="sState.configTestData.permissions?.granted?.length" class="perm-section">
+              <span class="perm-section-label">已授予权限</span>
+              <div class="perm-tags">
+                <span v-for="p in sState.configTestData.permissions.granted" :key="p" class="perm-tag granted">{{ p }}</span>
+              </div>
+            </div>
+            <div v-if="sState.configTestData.permissions?.missing?.length" class="perm-section">
+              <span class="perm-section-label">缺失权限</span>
+              <div class="perm-tags">
+                <span v-for="p in sState.configTestData.permissions.missing" :key="p" class="perm-tag missing">{{ p }}</span>
+              </div>
+            </div>
+            <div v-if="sState.configTestData.issues?.length" class="perm-section">
+              <div v-for="issue in sState.configTestData.issues" :key="issue" class="issue-item">
+                <el-icon><WarningFilled /></el-icon>{{ issue }}
+              </div>
             </div>
           </div>
-          <div v-if="sState.configTestData.permissions?.granted?.length" class="perm-section">
-            <strong>已授予权限：</strong>
-            <span v-for="p in sState.configTestData.permissions.granted" :key="p" class="perm-tag granted">{{ p }}</span>
-          </div>
-          <div v-if="sState.configTestData.permissions?.missing?.length" class="perm-section">
-            <strong>缺失权限：</strong>
-            <span v-for="p in sState.configTestData.permissions.missing" :key="p" class="perm-tag missing">{{ p }}</span>
-          </div>
-          <div v-if="sState.configTestData.issues?.length" class="perm-section">
-            <div v-for="issue in sState.configTestData.issues" :key="issue" class="issue-item">{{ issue }}</div>
-          </div>
-        </div>
+        </transition>
       </div>
 
       <!-- Password Change Card -->
-      <div class="glass-card surface-card interactive-surface settings-panel" v-loading="changingPassword">
-        <h3>修改密码</h3>
+      <div class="glass-card surface-card settings-panel" v-loading="changingPassword">
+        <div class="panel-head">
+          <span class="panel-icon"><el-icon><Lock /></el-icon></span>
+          <div>
+            <h3 class="section-title">修改密码</h3>
+            <p class="panel-desc">修改后需要使用新密码重新登录。</p>
+          </div>
+        </div>
         <el-form label-position="top">
           <el-form-item label="当前密码">
             <el-input v-model="sState.passwordForm.currentPassword" type="password" show-password />
@@ -52,10 +74,10 @@
           <el-form-item label="确认新密码">
             <el-input v-model="sState.passwordForm.confirmPassword" type="password" show-password />
           </el-form-item>
-          <el-button type="primary" @click="handleChangePassword" :loading="changingPassword">修改密码</el-button>
+          <el-button type="primary" @click="handleChangePassword" :loading="changingPassword" :icon="Refresh">修改密码</el-button>
         </el-form>
         <div v-if="sState.passwordResult" class="password-result">
-          {{ sState.passwordResult }}
+          <el-icon><InfoFilled /></el-icon>{{ sState.passwordResult }}
         </div>
       </div>
     </div>
@@ -64,6 +86,7 @@
 
 <script setup>
 import { onMounted, ref } from "vue";
+import { Key, Lock, MagicStick, Stamp, Refresh, InfoFilled, WarningFilled } from "@element-plus/icons-vue";
 import { useSettings } from "../composables/useSettings.js";
 import { useAuth } from "../composables/useAuth.js";
 import { useRouter } from "vue-router";
@@ -128,40 +151,56 @@ onMounted(loadSettings);
 <style scoped>
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: var(--space-5);
+  align-items: start;
 }
-.glass-card {
-  position: relative;
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid var(--glass-border, rgba(255,255,255,0.08));
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+.glass-card { position: relative; padding: var(--space-6); }
+
+.panel-head { display: flex; gap: var(--space-3); margin-bottom: var(--space-5); }
+.panel-icon {
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  background: var(--primary-soft); color: var(--primary); font-size: 20px;
 }
-.settings-panel:hover {
-  transform: translateY(-1px);
-  border-color: var(--line-strong, rgba(92, 126, 178, 0.30));
-  box-shadow: var(--shadow-soft, 0 10px 28px rgba(50, 80, 130, 0.10));
+.panel-desc { margin: 4px 0 0; font-size: var(--fs-xs); color: var(--text-secondary); line-height: var(--lh-base); }
+
+.form-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.test-result {
+  margin-top: var(--space-5); padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+  display: grid; gap: var(--space-3);
 }
-h3 { margin: 0 0 20px; font-size: 16px; }
-.form-actions { display: flex; gap: 8px; }
-.test-result { margin-top: 20px; }
-.permission-grid { display: flex; gap: 12px; margin-bottom: 12px; }
-.perm-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.perm-dot { width: 8px; height: 8px; border-radius: 50%; }
-.perm-dot.ok { background: #67c23a; }
-.perm-dot.err { background: #f56c6c; }
-.perm-section { margin-top: 8px; }
+.test-result-head { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; font-size: var(--fs-sm); }
+.test-result-head .el-icon { color: var(--primary); }
+.permission-grid { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+.perm-item { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); font-weight: 600; }
+.perm-mark { font-size: 16px; }
+.perm-mark.ok { color: var(--success); }
+.perm-mark.err { color: var(--danger); }
+.perm-section { display: grid; gap: 6px; }
+.perm-section-label { font-size: var(--fs-xs); font-weight: 700; color: var(--text-secondary); letter-spacing: 0.04em; }
+.perm-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .perm-tag {
-  display: inline-block; padding: 2px 8px; margin: 2px;
-  border-radius: 6px; font-size: 12px;
+  display: inline-block; padding: 3px 10px;
+  border-radius: var(--radius-pill); font-size: var(--fs-xs); font-weight: 600;
+  font-family: "Fira Code", monospace;
 }
-.perm-tag.granted { background: rgba(103,194,58,0.1); color: #67c23a; }
-.perm-tag.missing { background: rgba(245,108,108,0.1); color: #f56c6c; }
-.issue-item { font-size: 13px; color: #e6a23c; padding: 4px 0; }
-.password-result { margin-top: 12px; font-size: 13px; color: var(--text-secondary, #999); }
+.perm-tag.granted { background: var(--success-soft); color: var(--success); }
+.perm-tag.missing { background: var(--danger-soft); color: var(--danger); }
+.issue-item { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--warn); }
+.password-result {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: var(--space-3); padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm); background: var(--primary-soft);
+  font-size: var(--fs-sm); color: var(--primary);
+}
+.collapse-fade-enter-active, .collapse-fade-leave-active { transition: opacity 200ms ease, transform 200ms ease; }
+.collapse-fade-enter-from, .collapse-fade-leave-to { opacity: 0; transform: translateY(-6px); }
 @media (prefers-reduced-motion: reduce) {
-  .glass-card { transition: none; }
-  .settings-panel:hover { transform: none; }
+  .collapse-fade-enter-active, .collapse-fade-leave-active { transition: none; }
+  .collapse-fade-enter-from, .collapse-fade-leave-to { transform: none; }
 }
 </style>

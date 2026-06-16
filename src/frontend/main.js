@@ -32,6 +32,7 @@ async function bootstrap() {
     dbg("2. Vue loaded");
 
     const ElementPlus = (await import("element-plus")).default;
+    const ElementPlusIconsVue = await import("@element-plus/icons-vue");
     dbg("3. ElementPlus loaded");
 
     await import("element-plus/dist/index.css");
@@ -54,6 +55,10 @@ async function bootstrap() {
     dbg("7. Installing plugins...");
     app.use(ElementPlus);
     app.use(router);
+
+    for (const [name, component] of Object.entries(ElementPlusIconsVue)) {
+      app.component(name, component);
+    }
     dbg("8. Mounting to #app...");
 
     app.mount("#app");
