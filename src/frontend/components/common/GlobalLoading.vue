@@ -41,8 +41,8 @@ const loadingState = useGlobalLoading();
 .loading-spinner {
   width: 20px; height: 20px;
   border-radius: 50%;
-  border: 2px solid rgba(42, 109, 246, 0.18);
-  border-top-color: var(--el-color-primary, #f38020);
+  border: 2px solid var(--primary-soft, rgba(42, 109, 246, 0.18));
+  border-top-color: var(--primary, #2a6df6);
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }

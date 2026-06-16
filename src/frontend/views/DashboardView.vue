@@ -3,8 +3,8 @@
     <template v-if="showSkeleton">
       <div class="dashboard-skeleton">
         <div class="status-grid">
-          <div v-for="item in skeletonCards" :key="item" class="signal-card surface-card skeleton-card">
-            <div class="skeleton-dot"></div>
+          <div v-for="item in skeletonCards" :key="item" class="stat-tile surface-card skeleton-card">
+            <div class="skeleton-icon"></div>
             <div class="skeleton-copy">
               <div class="skeleton-line short"></div>
               <div class="skeleton-line"></div>
@@ -26,56 +26,69 @@
 
     <template v-else>
       <transition-group name="card-stagger" tag="div" class="status-grid">
-        <div class="signal-card surface-card interactive-surface" v-for="signal in signals" :key="signal.label">
-          <div class="signal-dot" :class="signal.ok ? 'ok' : 'warn'"></div>
-          <div>
-            <div class="signal-label">{{ signal.label }}</div>
-            <div class="signal-value">{{ signal.value }}</div>
+        <div class="stat-tile surface-card interactive-surface" v-for="signal in signals" :key="signal.label">
+          <span class="stat-icon" :class="signal.ok ? 'ok' : 'warn'">
+            <el-icon><component :is="signal.icon" /></el-icon>
+          </span>
+          <div class="stat-body">
+            <div class="stat-label">{{ signal.label }}</div>
+            <div class="stat-value">{{ signal.value }}</div>
           </div>
+          <span class="stat-dot" :class="signal.ok ? 'ok' : 'warn'"></span>
         </div>
       </transition-group>
 
       <section v-if="cfState.runtimeMetricsHistory.length > 1" class="chart-section surface-card">
-        <h3 class="dashboard-section-title">实时指标</h3>
+        <h3 class="section-title"><el-icon><TrendCharts /></el-icon>实时指标</h3>
         <div class="chart-row">
-          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="activeConnections" label="连接数" color="#67c23a" />
-          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesUp" label="上行(B)" color="#409eff" />
+          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="activeConnections" label="连接数" color="#2a6df6" />
+          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesUp" label="上行(B)" color="#1a9960" />
         </div>
       </section>
 
       <section class="dashboard-section">
-        <div class="dashboard-divider"></div>
-        <h3 class="dashboard-section-title">Tunnel 快速概览</h3>
+        <div class="section-head">
+          <h3 class="section-title"><el-icon><Connection /></el-icon>Tunnel 快速概览</h3>
+          <el-button v-if="tunnels.length" text type="primary" @click="router.push('/tunnels')">
+            管理全部<el-icon class="el-icon--right"><ArrowRight /></el-icon>
+          </el-button>
+        </div>
         <div v-if="tunnels.length" class="tunnel-overview">
           <div
             v-for="t in tunnels.slice(0, 6)"
             :key="t.id"
-            class="overview-card surface-card interactive-surface clickable"
+            class="overview-card surface-card interactive-surface"
             @click="router.push(`/tunnels/${t.id}/edit`)"
           >
             <div class="overview-header">
               <span class="overview-name">{{ t.name }}</span>
-              <div class="overview-badges">
-                <el-tag :type="runningTunnels.has(t.id) ? 'success' : 'info'" size="small">
-                  {{ runningTunnels.has(t.id) ? '运行中' : '已停止' }}
-                </el-tag>
-                <span class="conn-count">{{ t.connections || 0 }} 连接</span>
-              </div>
+              <el-tag :type="runningTunnels.has(t.id) ? 'success' : 'info'" size="small" round>
+                {{ runningTunnels.has(t.id) ? '运行中' : '已停止' }}
+              </el-tag>
             </div>
             <div class="overview-mappings">
               <span v-for="m in (t.configuration?.mappings || []).slice(0, 2)" :key="m.hostname || m.service" class="mapping-chip">
-                {{ m.hostname || m.service || '(默认)' }}
+                <el-icon><Link /></el-icon>{{ m.hostname || m.service || '(默认)' }}
               </span>
+              <span v-if="!(t.configuration?.mappings || []).length" class="mapping-empty">未配置路由</span>
               <span v-if="(t.configuration?.mappings || []).length > 2" class="mapping-more">
                 +{{ (t.configuration?.mappings || []).length - 2 }}
               </span>
             </div>
-          </div>
-          <div v-if="tunnels.length > 6" class="view-all-card surface-card interactive-surface" @click="router.push('/tunnels')">
-            查看全部 {{ tunnels.length }} 个 Tunnel →
+            <div class="overview-footer">
+              <span class="overview-meta"><el-icon><Share /></el-icon>{{ t.connections || 0 }} 连接</span>
+              <span class="overview-edit">编辑<el-icon><ArrowRight /></el-icon></span>
+            </div>
           </div>
         </div>
-        <el-empty v-else-if="!tunnelsLoading" description="暂无 Tunnel" />
+        <div v-else-if="!tunnelsLoading" class="empty-state surface-card">
+          <span class="empty-icon"><el-icon><Connection /></el-icon></span>
+          <div class="empty-title">还没有 Tunnel</div>
+          <div class="empty-desc">先在 Cloudflare 配置中填写凭据，然后创建第一个 Tunnel。</div>
+          <el-button type="primary" @click="router.push('/tunnels/create')">
+            <el-icon class="el-icon--left"><Plus /></el-icon>新建 Tunnel
+          </el-button>
+        </div>
       </section>
     </template>
   </div>
@@ -107,10 +120,10 @@ const runningTunnels = computed(() => {
 });
 
 const signals = computed(() => [
-  { label: "cloudflared", ok: cfState.cloudflared.binaryExists, value: cfState.cloudflared.binaryVersion || (cfState.cloudflared.binaryExists ? '已就绪' : '未安装') },
-  { label: "API 凭据", ok: !!tunnelsState.tunnels.length, value: tunnelsState.tunnels.length ? '已配置' : '未配置' },
-  { label: "运行中", ok: cfState.cloudflared.runningCount > 0, value: `${cfState.cloudflared.runningCount} / ${cfState.cloudflared.processCount}` },
-  { label: "Tunnels", ok: tunnelsState.tunnels.length > 0, value: `${tunnelsState.tunnels.length} 个` }
+  { label: "cloudflared", icon: "Cpu", ok: cfState.cloudflared.binaryExists, value: cfState.cloudflared.binaryVersion || (cfState.cloudflared.binaryExists ? '已就绪' : '未安装') },
+  { label: "API 凭据", icon: "Key", ok: !!tunnelsState.tunnels.length, value: tunnelsState.tunnels.length ? '已配置' : '未配置' },
+  { label: "运行中进程", icon: "VideoPlay", ok: cfState.cloudflared.runningCount > 0, value: `${cfState.cloudflared.runningCount} / ${cfState.cloudflared.processCount}` },
+  { label: "Tunnels", icon: "Connection", ok: tunnelsState.tunnels.length > 0, value: `${tunnelsState.tunnels.length} 个` }
 ]);
 
 onMounted(async () => {
@@ -128,210 +141,143 @@ onMounted(async () => {
   --dashboard-gap: 20px;
   --dashboard-card-gap: 16px;
   gap: var(--dashboard-gap);
-  padding-bottom: 24px;
+  padding-bottom: var(--space-6);
 }
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--dashboard-card-gap);
   margin: 0;
 }
-.dashboard-skeleton {
-  display: grid;
-  gap: var(--dashboard-gap);
-  animation: skeleton-enter 180ms ease-out;
-}
-.signal-card {
-  display: flex; align-items: center; gap: 12px; padding: 16px;
-  border-radius: 14px;
-  background: var(--glass-bg, rgba(255,255,255,0.06));
-  border: 1px solid var(--glass-border, rgba(255,255,255,0.08));
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
-}
-.skeleton-card,
-.skeleton-overview {
-  pointer-events: none;
-  overflow: hidden;
+.dashboard-skeleton { display: grid; gap: var(--dashboard-gap); animation: skeleton-enter 180ms ease-out; }
+
+/* Stat tiles */
+.stat-tile {
   position: relative;
-}
-.skeleton-card::after,
-.skeleton-overview::after,
-.skeleton-heading::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
-  animation: skeleton-shimmer 1.15s ease-in-out infinite;
-}
-.skeleton-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(126, 158, 208, 0.30);
-  flex-shrink: 0;
-}
-.skeleton-copy {
-  flex: 1;
-}
-.skeleton-line,
-.skeleton-heading,
-.skeleton-pill {
-  position: relative;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(126, 158, 208, 0.22);
-}
-.skeleton-line {
-  width: 72%;
-  height: 12px;
-  margin-top: 8px;
-}
-.skeleton-line.short {
-  width: 38%;
-  height: 10px;
-  margin-top: 0;
-}
-.skeleton-line.wide {
-  width: 68%;
-}
-.skeleton-heading {
-  width: 150px;
-  height: 16px;
-  margin: 0;
-}
-.skeleton-overview {
-  min-height: 88px;
-}
-.skeleton-pill-row {
   display: flex;
-  gap: 8px;
-  margin-top: 20px;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
-.skeleton-pill {
-  display: inline-block;
-  width: 98px;
-  height: 22px;
-}
-.skeleton-pill.narrow {
-  width: 56px;
-}
-.signal-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--line-strong, rgba(92, 126, 178, 0.30));
-  box-shadow: var(--shadow-soft, 0 10px 28px rgba(50, 80, 130, 0.10));
-}
-.signal-dot {
-  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
-}
-.signal-dot.ok { background: #67c23a; }
-.signal-dot.warn { background: #e6a23c; }
-.signal-label { font-size: 12px; color: var(--text-secondary, #999); }
-.signal-value { font-size: 14px; font-weight: 500; margin-top: 2px; }
-.dashboard-section,
-.chart-section {
+.stat-icon {
   display: grid;
-  gap: var(--dashboard-card-gap);
-  min-width: 0;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  font-size: 20px;
 }
-.chart-section {
-  padding: 20px;
-  border-radius: 16px;
-  margin: 0;
+.stat-icon.ok   { background: var(--primary-soft); color: var(--primary); }
+.stat-icon.warn { background: var(--warn-soft); color: var(--warn); }
+.stat-body { flex: 1; min-width: 0; }
+.stat-label { font-size: var(--fs-xs); color: var(--text-secondary); font-weight: 600; }
+.stat-value {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.dashboard-section-title {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.35;
-}
-.dashboard-divider {
-  height: 1px;
-  margin: 0;
-  background: var(--line, rgba(92, 126, 178, 0.18));
-}
-.chart-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: var(--dashboard-card-gap);
-}
+.stat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.stat-dot.ok   { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+.stat-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+
+/* Chart section */
+.chart-section { display: grid; gap: var(--dashboard-card-gap); padding: var(--space-5); border-radius: var(--radius-lg); margin: 0; }
+.chart-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--dashboard-card-gap); }
+
+/* Section */
+.dashboard-section { display: grid; gap: var(--dashboard-card-gap); min-width: 0; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+
+/* Overview cards */
 .tunnel-overview {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: var(--dashboard-card-gap);
 }
 .overview-card {
-  padding: 16px;
-  border-radius: 12px;
-  background: var(--glass-bg, rgba(255,255,255,0.04));
-  border: 1px solid var(--glass-border, rgba(255,255,255,0.06));
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
 }
-.overview-card:hover {
-  background: var(--glass-bg-hover, rgba(255,255,255,0.08));
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-soft, 0 10px 28px rgba(50, 80, 130, 0.10));
-}
-.overview-header {
-  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
-}
-.overview-name { font-weight: 600; font-size: 14px; }
-.overview-badges { display: flex; align-items: center; gap: 8px; }
-.conn-count { font-size: 12px; color: var(--text-secondary, #999); }
+.overview-header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.overview-name { font-weight: 700; font-size: var(--fs-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-mappings { display: flex; flex-wrap: wrap; gap: 6px; min-height: 24px; }
 .mapping-chip {
-  display: inline-block;
-  padding: 2px 8px; margin: 2px;
-  border-radius: 6px;
-  background: var(--glass-bg, rgba(255,255,255,0.06));
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  font-size: var(--fs-xs);
+  color: var(--text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.mapping-more { font-size: 12px; color: var(--text-secondary, #999); margin-left: 4px; }
-.view-all-card {
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px dashed var(--glass-border, rgba(255,255,255,0.15));
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 13px; color: var(--text-secondary, #999);
+.mapping-chip .el-icon { font-size: 11px; color: var(--primary); flex-shrink: 0; }
+.mapping-empty { font-size: var(--fs-xs); color: var(--text-faint); font-style: italic; }
+.mapping-more { font-size: var(--fs-xs); color: var(--text-secondary); align-self: center; }
+.overview-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
 }
-.view-all-card:hover { background: var(--glass-bg-hover, rgba(255,255,255,0.04)); }
-.card-stagger-enter-active,
-.card-stagger-leave-active {
-  transition: opacity 180ms ease, transform 180ms ease;
+.overview-meta { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); color: var(--text-secondary); }
+.overview-meta .el-icon { font-size: 12px; }
+.overview-edit {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: var(--fs-xs); font-weight: 600; color: var(--primary);
+  opacity: 0; transform: translateX(-4px);
+  transition: opacity var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
 }
-.card-stagger-enter-from,
-.card-stagger-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
+.overview-card:hover .overview-edit { opacity: 1; transform: translateX(0); }
+
+/* Skeletons */
+.skeleton-card, .skeleton-overview { pointer-events: none; overflow: hidden; position: relative; }
+.skeleton-card::after, .skeleton-overview::after, .skeleton-heading::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+  animation: skeleton-shimmer 1.15s ease-in-out infinite;
 }
-@keyframes skeleton-shimmer {
-  100% { transform: translateX(100%); }
+.skeleton-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); background: rgba(126,158,208,0.22); flex-shrink: 0; }
+.skeleton-copy { flex: 1; }
+.skeleton-line, .skeleton-heading, .skeleton-pill {
+  position: relative; overflow: hidden; border-radius: var(--radius-pill); background: rgba(126,158,208,0.22);
 }
-@keyframes skeleton-enter {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@media (max-width: 900px) {
-  .chart-row {
-    grid-template-columns: 1fr;
-  }
-}
+.skeleton-line { width: 72%; height: 12px; margin-top: 8px; }
+.skeleton-line.short { width: 38%; height: 10px; margin-top: 0; }
+.skeleton-line.wide { width: 68%; }
+.skeleton-heading { width: 160px; height: 18px; margin: 0; }
+.skeleton-overview { min-height: 96px; }
+.skeleton-pill-row { display: flex; gap: 8px; margin-top: 20px; }
+.skeleton-pill { display: inline-block; width: 98px; height: 22px; }
+.skeleton-pill.narrow { width: 56px; }
+
+.card-stagger-enter-active, .card-stagger-leave-active { transition: opacity 180ms ease, transform 180ms ease; }
+.card-stagger-enter-from, .card-stagger-leave-to { opacity: 0; transform: translateY(6px); }
+
+@keyframes skeleton-shimmer { 100% { transform: translateX(100%); } }
+@keyframes skeleton-enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+@media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
-  .signal-card,
-  .overview-card,
-  .card-stagger-enter-active,
-  .card-stagger-leave-active,
-  .dashboard-skeleton,
-  .skeleton-card::after,
-  .skeleton-overview::after,
-  .skeleton-heading::after {
-    animation: none;
-    transition: none;
-  }
-  .signal-card:hover,
-  .overview-card:hover,
-  .card-stagger-enter-from,
-  .card-stagger-leave-to {
-    transform: none;
-  }
+  .stat-tile, .overview-card, .card-stagger-enter-active, .card-stagger-leave-active,
+  .dashboard-skeleton, .skeleton-card::after, .skeleton-overview::after, .skeleton-heading::after,
+  .overview-edit { animation: none; transition: none; }
+  .card-stagger-enter-from, .card-stagger-leave-to { transform: none; }
+  .overview-card:hover .overview-edit { transform: none; }
 }
 </style>

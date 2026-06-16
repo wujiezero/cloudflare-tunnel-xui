@@ -239,7 +239,9 @@ test("login feature list does not use emoji icons", () => {
   const login = read("src/frontend/views/LoginView.vue");
 
   assert.doesNotMatch(login, /🔒|🚀|📊/);
-  assert.match(login, /feature-mark/);
+  // Feature list uses Element Plus icon components, not emoji or ad-hoc marks.
+  assert.match(login, /class="login-features"/);
+  assert.match(login, /<el-icon>/);
 });
 
 test("router supports direct tunnels paths and legacy hash URLs", () => {
@@ -278,8 +280,9 @@ test("sidebar uses text-safe controls and active motion indicator", () => {
 
   assert.doesNotMatch(sidebar, /☀️|🌙|🔧|🚀|⚙️/);
   assert.match(sidebar, /class="nav-indicator"/);
-  assert.match(sidebar, /class="theme-toggle"/);
-  assert.match(sidebar, /class="logout-button"/);
+  // Footer controls are icon + text buttons (theme toggle + logout).
+  assert.match(sidebar, /class="footer-btn theme-toggle"/);
+  assert.match(sidebar, /class="footer-btn logout"/);
 });
 
 test("main pages use shared page and surface classes", () => {
