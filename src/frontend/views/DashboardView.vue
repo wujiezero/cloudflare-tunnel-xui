@@ -58,7 +58,7 @@
             v-for="t in tunnels.slice(0, 6)"
             :key="t.id"
             class="overview-card surface-card interactive-surface"
-            @click="router.push(`/tunnels/${t.id}/edit`)"
+            @click="router.push({ path: '/tunnels', query: { edit: t.id } })"
           >
             <div class="overview-header">
               <span class="overview-name">{{ t.name }}</span>
