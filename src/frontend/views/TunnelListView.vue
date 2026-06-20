@@ -8,6 +8,15 @@
 
     <div class="toolbar toolbar-surface">
       <div class="toolbar-left">
+        <el-tooltip :content="allFilteredSelected ? '取消全选' : '全选当前列表'" placement="top">
+          <el-checkbox
+            class="select-all-check"
+            :model-value="allFilteredSelected"
+            :indeterminate="someFilteredSelected"
+            :disabled="!filteredTunnels.length"
+            @change="toggleAllFiltered"
+          >全选</el-checkbox>
+        </el-tooltip>
         <el-input
           v-model="tunnelsState.tunnelSearch"
           placeholder="搜索名称或 ID"
@@ -85,7 +94,7 @@
           <div class="tunnel-info">
             <div class="tunnel-card-header">
               <span class="status-led" :class="(t.status === 'healthy' || runningTunnels.has(t.id)) ? 'online' : 'offline'"></span>
-              <div class="tunnel-name">{{ t.name }}</div>
+              <div class="tunnel-name" :title="t.name">{{ t.name }}</div>
               <el-tag v-if="t.status === 'healthy' || runningTunnels.has(t.id)" type="success" size="small" round>在线</el-tag>
               <el-tag v-else type="info" size="small" round>离线</el-tag>
             </div>
@@ -94,9 +103,16 @@
               <span class="meta-item"><el-icon><Link /></el-icon>{{ (t.configuration?.mappings || []).length }} 路由</span>
             </div>
             <div class="tunnel-card-mappings" v-if="(t.configuration?.mappings || []).length">
-              <span v-for="m in (t.configuration?.mappings || []).slice(0, 3)" :key="m.hostname || m.service" class="mapping-tag">
+              <button
+                v-for="m in (t.configuration?.mappings || []).slice(0, 3)"
+                :key="m.hostname || m.service"
+                type="button"
+                class="mapping-tag"
+                title="点击复制"
+                @click="copyText(m.hostname || m.service, '域名')"
+              >
                 {{ m.hostname || m.service }}
-              </span>
+              </button>
               <span v-if="(t.configuration?.mappings || []).length > 3" class="mapping-more">
                 +{{ (t.configuration?.mappings || []).length - 3 }}
               </span>
@@ -169,12 +185,23 @@ import {
 import { useTunnels } from "../composables/useTunnels.js";
 import { useCloudflared } from "../composables/useCloudflared.js";
 import { useApi } from "../composables/useApi.js";
+import { useClipboard } from "../composables/useClipboard.js";
 
 const router = useRouter();
 const { state: tunnelsState, filteredTunnels, loadTunnels, deleteTunnel,
-        toggleTunnelSelection, exportTunnels, importTunnels, batchAction } = useTunnels();
+        toggleTunnelSelection, toggleAllFiltered, exportTunnels, importTunnels, batchAction } = useTunnels();
 const { state: cfState, startTunnel, stopTunnel, openTunnelLogs, refreshRuntimeStatus } = useCloudflared();
 const { notify } = useApi();
+const { copyText } = useClipboard();
+
+const allFilteredSelected = computed(() =>
+  filteredTunnels.value.length > 0 &&
+  filteredTunnels.value.every((t) => tunnelsState.tunnelSelection.includes(t.id))
+);
+const someFilteredSelected = computed(() =>
+  !allFilteredSelected.value &&
+  filteredTunnels.value.some((t) => tunnelsState.tunnelSelection.includes(t.id))
+);
 
 import RuntimeViewer from "../components/monitoring/RuntimeViewer.vue";
 
@@ -367,7 +394,11 @@ onMounted(loadTunnels);
   background: var(--panel-soft); border: 1px solid var(--line);
   font-size: var(--fs-xs); color: var(--text-secondary);
   max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
 }
+.mapping-tag:hover { border-color: var(--primary-ring); color: var(--primary); }
+.select-all-check { margin-right: 2px; flex-shrink: 0; }
 .mapping-more { font-size: var(--fs-xs); color: var(--text-secondary); align-self: center; }
 
 .tunnel-card-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; flex-shrink: 0; }
