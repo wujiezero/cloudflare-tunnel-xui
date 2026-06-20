@@ -290,7 +290,6 @@ test("main pages use shared page and surface classes", () => {
     "src/frontend/views/DashboardView.vue",
     "src/frontend/views/TunnelListView.vue",
     "src/frontend/views/SettingsView.vue",
-    "src/frontend/views/TunnelEditorView.vue",
     "src/frontend/views/TunnelCreateView.vue",
     "src/frontend/views/AboutView.vue"
   ];
@@ -300,4 +299,27 @@ test("main pages use shared page and surface classes", () => {
     assert.match(source, /page-shell/, `${file} should use shared page-shell spacing`);
     assert.match(source, /surface-card/, `${file} should use shared surface-card styling`);
   }
+});
+
+test("tunnel editing happens in an in-context drawer instead of a separate page", () => {
+  const drawer = read("src/frontend/components/tunnels/TunnelEditorDrawer.vue");
+  const list = read("src/frontend/views/TunnelListView.vue");
+  const router = read("src/frontend/router/index.js");
+  const globalCss = read("src/frontend/styles/global.css");
+
+  // The editor is a drawer surface, not a routed full page.
+  assert.match(drawer, /<el-drawer/);
+  assert.match(drawer, /surface-card/);
+  assert.match(drawer, /before-close/);
+  assert.match(globalCss, /\.glass-drawer\.el-drawer\s*\{/s);
+
+  // The list opens the drawer locally rather than navigating away.
+  assert.match(list, /TunnelEditorDrawer/);
+  assert.match(list, /v-model="showEditor"/);
+  assert.doesNotMatch(list, /router\.push\(`\/tunnels\/\$\{[^}]*\}\/edit`\)/);
+
+  // The legacy edit path stays usable as a redirect into the drawer.
+  assert.doesNotMatch(router, /TunnelEditorView/);
+  assert.match(router, /path:\s*"\/tunnels\/:id\/edit"/);
+  assert.match(router, /redirect:/);
 });

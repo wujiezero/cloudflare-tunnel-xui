@@ -21,11 +21,10 @@ const routes = [
     component: () => import("../views/TunnelCreateView.vue")
   },
   {
+    // Editing now happens in an in-context drawer on the tunnel list.
+    // Keep the legacy path working by redirecting to the list with ?edit=<id>.
     path: "/tunnels/:id/edit",
-    name: "tunnel-editor",
-    meta: { title: "编辑 Tunnel", subtitle: "配置路由映射与 DNS 发布" },
-    component: () => import("../views/TunnelEditorView.vue"),
-    props: true
+    redirect: (to) => ({ path: "/tunnels", query: { edit: to.params.id } })
   },
   {
     path: "/settings",

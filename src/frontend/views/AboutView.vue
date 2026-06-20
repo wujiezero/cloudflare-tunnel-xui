@@ -47,7 +47,7 @@ const steps = [
   { title: "配置凭据", desc: "在「Cloudflare 配置」中填写 Account ID 与 API Token。" },
   { title: "校验权限", desc: "测试 Token，确保具备 Tunnel 管理与 DNS 发布权限。" },
   { title: "创建 Tunnel", desc: "在「Tunnels」页面新建一个命名 Tunnel。" },
-  { title: "配置路由", desc: "进入编辑页，添加域名到本地服务的 ingress 映射。" },
+  { title: "配置路由", desc: "在 Tunnel 列表点击「编辑」打开抽屉，添加域名到本地服务的 ingress 映射。" },
   { title: "启动运行", desc: "点击「启动」拉起 cloudflared 进程，并同步 DNS。" }
 ];
 </script>

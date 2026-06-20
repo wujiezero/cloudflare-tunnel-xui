@@ -591,6 +591,32 @@ a:hover { text-decoration: underline; }
 .glass-dialog.runtime-dialog .el-dialog__footer { padding: var(--space-3) var(--space-6) var(--space-5); }
 
 /* ─────────────────────────────────────────────
+   10b. Drawer (glass) — in-context editing surface
+   ───────────────────────────────────────────── */
+.glass-drawer.el-drawer {
+  border-left: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--panel-strong), var(--panel-soft));
+  box-shadow: var(--shadow), var(--inset-highlight);
+  backdrop-filter: var(--blur-heavy);
+  -webkit-backdrop-filter: var(--blur-heavy);
+}
+.glass-drawer .el-drawer__header {
+  margin: 0;
+  padding: var(--space-5) var(--space-6) var(--space-4);
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 700;
+}
+.glass-drawer .el-drawer__title { font-weight: 700; color: var(--text); font-size: var(--fs-md); }
+.glass-drawer .el-drawer__body { padding: var(--space-5) var(--space-6) var(--space-6); }
+.glass-drawer .el-drawer__close-btn { color: var(--text-secondary); }
+.glass-drawer .el-drawer__close-btn:hover { color: var(--primary); }
+@media (max-width: 720px) {
+  .glass-drawer .el-drawer__body { padding: var(--space-4); }
+  .glass-drawer .el-drawer__header { padding: var(--space-4) var(--space-4) var(--space-3); }
+}
+
+/* ─────────────────────────────────────────────
    11. Loading overlay (Element)
    ───────────────────────────────────────────── */
 .el-loading-mask {

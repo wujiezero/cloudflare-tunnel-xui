@@ -171,12 +171,15 @@
 
     <!-- Runtime Viewer Dialog -->
     <RuntimeViewer v-model="showRuntime" />
+
+    <!-- Tunnel Editor Drawer (in-context editing) -->
+    <TunnelEditorDrawer v-model="showEditor" :tunnel-id="editTunnelId" @saved="onEditorSaved" />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
-import { useRouter } from "vue-router";
+import { ref, computed, onMounted, watch } from "vue";
+import { useRouter, useRoute } from "vue-router";
 import { ElMessageBox } from "element-plus";
 import {
   Search, Sort, SortUp, SortDown, Download, Upload, Select,
@@ -188,6 +191,7 @@ import { useApi } from "../composables/useApi.js";
 import { useClipboard } from "../composables/useClipboard.js";
 
 const router = useRouter();
+const route = useRoute();
 const { state: tunnelsState, filteredTunnels, loadTunnels, deleteTunnel,
         toggleTunnelSelection, toggleAllFiltered, exportTunnels, importTunnels, batchAction } = useTunnels();
 const { state: cfState, startTunnel, stopTunnel, openTunnelLogs, refreshRuntimeStatus } = useCloudflared();
@@ -204,12 +208,15 @@ const someFilteredSelected = computed(() =>
 );
 
 import RuntimeViewer from "../components/monitoring/RuntimeViewer.vue";
+import TunnelEditorDrawer from "../components/tunnels/TunnelEditorDrawer.vue";
 
 const showImport = ref(false);
 const importJson = ref("");
 const importing = ref(false);
 const exporting = ref(false);
 const showRuntime = ref(false);
+const showEditor = ref(false);
+const editTunnelId = ref("");
 const actionState = ref({ tunnelId: null, type: "" });
 const showSkeleton = computed(() => tunnelsState.tunnelsLoading && !tunnelsState.tunnels.length);
 
@@ -318,10 +325,36 @@ function handleOpenLogs(tunnel) {
 }
 
 function handleEdit(tunnelId) {
-  router.push(`/tunnels/${tunnelId}/edit`);
+  editTunnelId.value = tunnelId;
+  showEditor.value = true;
 }
 
-onMounted(loadTunnels);
+function onEditorSaved() {
+  // Drawer mutates the shared tunnel object, so the list already reflects the
+  // change; refresh runtime status to keep connection/health counters current.
+  refreshRuntimeStatus();
+}
+
+// Keep the URL clean when the drawer closes; reload to pick up server-side
+// normalization of the just-edited tunnel.
+watch(showEditor, (open, wasOpen) => {
+  if (!open && wasOpen) {
+    editTunnelId.value = "";
+    if (route.query.edit) {
+      router.replace({ path: "/tunnels", query: {} });
+    }
+    loadTunnels();
+  }
+});
+
+onMounted(async () => {
+  await loadTunnels();
+  const deepLinkId = route.query.edit;
+  if (deepLinkId) {
+    editTunnelId.value = String(deepLinkId);
+    showEditor.value = true;
+  }
+});
 </script>
 
 <style scoped>
