@@ -15,8 +15,8 @@
           <div class="name-field">
             <label class="field-label">Tunnel 名称</label>
             <div class="name-input-row">
-              <el-input v-model="tunnel.name" class="name-input" size="large" />
-              <el-button type="primary" @click="handleSaveName" :loading="savingName" :icon="Check">保存</el-button>
+              <el-input v-model="tunnel.name" class="name-input" size="large" @keyup.enter="handleSaveName" />
+              <el-button type="primary" @click="handleSaveName" :loading="savingName" :disabled="!nameDirty" :icon="Check">保存</el-button>
             </div>
           </div>
           <div class="editor-meta">
@@ -24,6 +24,17 @@
             <el-tag v-else type="info" round>离线</el-tag>
             <span class="meta-line"><el-icon><Share /></el-icon>{{ tunnel.connections || 0 }} 连接</span>
             <span class="meta-line"><el-icon><Calendar /></el-icon>{{ tunnel.createdAt ? formatDateTime(tunnel.createdAt) : '—' }}</span>
+            <button
+              v-if="tunnel.id"
+              type="button"
+              class="meta-line id-chip"
+              :title="`点击复制 Tunnel ID：${tunnel.id}`"
+              @click="copyText(tunnel.id, 'Tunnel ID')"
+            >
+              <el-icon><Tickets /></el-icon>
+              <span class="id-text">{{ tunnel.id }}</span>
+              <el-icon class="copy-icon"><CopyDocument /></el-icon>
+            </button>
           </div>
         </div>
       </div>
@@ -52,10 +63,15 @@
                 </el-tooltip>
               </div>
               <div class="mapping-advanced">
-                <span class="advanced-toggle" @click="toggleAdvanced(idx)">
+                <button
+                  type="button"
+                  class="advanced-toggle"
+                  :aria-expanded="Boolean(mapping._showAdvanced)"
+                  @click="toggleAdvanced(idx)"
+                >
                   <el-icon><component :is="mapping._showAdvanced ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
                   {{ mapping._showAdvanced ? '收起高级选项' : '高级选项' }}
-                </span>
+                </button>
                 <el-button size="small" text type="primary" @click="handleTestOrigin(idx)">
                   <el-icon class="el-icon--left"><Aim /></el-icon>测试源站
                 </el-button>
@@ -79,6 +95,11 @@
           <el-button type="primary" @click="handleSaveMappings" :loading="saving" :icon="Check">保存路由</el-button>
           <el-button @click="handleCheckPublish" :loading="checkingPublish" :icon="View">检查发布状态</el-button>
           <el-button @click="handleSyncDns" :loading="syncingDns" :icon="RefreshRight">同步 DNS</el-button>
+          <transition name="collapse-fade">
+            <span v-if="mappingsDirty" class="dirty-hint">
+              <el-icon><WarningFilled /></el-icon>路由有未保存的改动
+            </span>
+          </transition>
         </div>
       </div>
 
@@ -103,20 +124,24 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { ref, computed, onMounted, onBeforeUnmount } from "vue";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import { ElMessageBox } from "element-plus";
 import {
   Back, Check, Plus, Delete, Link, Monitor, Right, Aim,
-  View, RefreshRight, Promotion, Guide, Calendar, Share
+  View, RefreshRight, Promotion, Guide, Calendar, Share,
+  CopyDocument, Tickets, WarningFilled
 } from "@element-plus/icons-vue";
 import { useTunnels } from "../composables/useTunnels.js";
 import { useApi } from "../composables/useApi.js";
+import { useClipboard } from "../composables/useClipboard.js";
 import { formatDateTime } from "../utils/formatters.js";
 
 const route = useRoute();
 const router = useRouter();
 const { state: tunnelsState, loadTunnels, saveMappings, checkPublishStatus, syncDns, testOrigin } = useTunnels();
 const { api, notify } = useApi();
+const { copyText } = useClipboard();
 
 const tunnelId = route.params.id;
 const tunnel = ref(null);
@@ -126,6 +151,29 @@ const checkingPublish = ref(false);
 const syncingDns = ref(false);
 const loadingTunnel = ref(false);
 const publishStatus = ref(null);
+
+// Baseline snapshot of the last saved name + mappings, used to detect unsaved edits.
+const savedState = ref({ name: "", mappings: "[]" });
+
+function snapshotMappings() {
+  const mappings = tunnel.value?.configuration?.mappings || [];
+  return JSON.stringify(
+    mappings.map((m) => ({
+      hostname: m.hostname || "",
+      service: m.service || "",
+      path: m.path || "",
+      originRequest: {
+        noTLSVerify: Boolean(m.originRequest?.noTLSVerify),
+        disableChunkedEncoding: Boolean(m.originRequest?.disableChunkedEncoding),
+        http2Origin: Boolean(m.originRequest?.http2Origin)
+      }
+    }))
+  );
+}
+
+const nameDirty = computed(() => Boolean(tunnel.value) && (tunnel.value.name || "") !== savedState.value.name);
+const mappingsDirty = computed(() => Boolean(tunnel.value) && snapshotMappings() !== savedState.value.mappings);
+const isDirty = computed(() => nameDirty.value || mappingsDirty.value);
 
 function loadTunnelData() {
   const t = tunnelsState.tunnels.find((t) => t.id === tunnelId);
@@ -137,7 +185,14 @@ function loadTunnelData() {
         if (!m.originRequest) m.originRequest = { noTLSVerify: false, disableChunkedEncoding: false, http2Origin: false };
       });
     }
+    savedState.value = { name: t.name || "", mappings: snapshotMappings() };
   }
+}
+
+function handleBeforeUnload(event) {
+  if (!isDirty.value) return;
+  event.preventDefault();
+  event.returnValue = "";
 }
 
 onMounted(async () => {
@@ -147,6 +202,44 @@ onMounted(async () => {
     loadTunnelData();
   } finally {
     loadingTunnel.value = false;
+  }
+  window.addEventListener("beforeunload", handleBeforeUnload);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("beforeunload", handleBeforeUnload);
+});
+
+// The editor mutates the shared tunnel object directly, so discarding must
+// restore the last saved snapshot to avoid leaking edits back into the list.
+function revertToBaseline() {
+  if (!tunnel.value) return;
+  tunnel.value.name = savedState.value.name;
+  try {
+    const baseMappings = JSON.parse(savedState.value.mappings);
+    tunnel.value.configuration = tunnel.value.configuration || {};
+    tunnel.value.configuration.mappings = baseMappings.map((m) => ({
+      hostname: m.hostname,
+      service: m.service,
+      path: m.path,
+      _showAdvanced: false,
+      originRequest: { ...m.originRequest }
+    }));
+  } catch (_) { /* keep current mappings if the snapshot can't be parsed */ }
+}
+
+onBeforeRouteLeave(async () => {
+  if (!isDirty.value) return true;
+  try {
+    await ElMessageBox.confirm("当前 Tunnel 有未保存的改动，确定要离开吗？", "未保存的改动", {
+      confirmButtonText: "放弃改动并离开",
+      cancelButtonText: "继续编辑",
+      type: "warning"
+    });
+    revertToBaseline();
+    return true;
+  } catch (_) {
+    return false;
   }
 });
 
@@ -180,6 +273,7 @@ async function handleSaveName() {
       method: "PUT",
       body: JSON.stringify({ name: tunnel.value.name })
     });
+    savedState.value = { ...savedState.value, name: tunnel.value.name || "" };
     notify("名称已更新");
   } catch (e) {
     notify(e.message, "error");
@@ -196,6 +290,7 @@ async function handleSaveMappings() {
       originRequest: m.originRequest
     }));
     await saveMappings(tunnel.value, mappings);
+    savedState.value = { ...savedState.value, mappings: snapshotMappings() };
     notify("路由已保存");
   } catch (e) {
     notify(e.message, "error");
@@ -269,6 +364,31 @@ async function handleTestOrigin(idx) {
 .meta-line { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-xs); color: var(--text-secondary); }
 .meta-line .el-icon { font-size: 13px; }
 
+/* Copyable Tunnel ID chip */
+.id-chip {
+  max-width: 100%;
+  min-width: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--panel-soft);
+  font-family: "Fira Code", monospace;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+}
+.id-chip .id-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.id-chip .copy-icon { font-size: 12px; opacity: 0.55; flex-shrink: 0; }
+.id-chip:hover { border-color: var(--primary-ring); color: var(--primary); }
+.id-chip:hover .copy-icon { opacity: 1; }
+
+/* Unsaved-changes hint */
+.dirty-hint {
+  display: inline-flex; align-items: center; gap: 5px;
+  align-self: center;
+  font-size: var(--fs-xs); font-weight: 600; color: var(--warn);
+}
+.dirty-hint .el-icon { font-size: 14px; }
+
 /* Section */
 .editor-section { padding: var(--space-5); }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-4); }
@@ -299,6 +419,7 @@ async function handleTestOrigin(idx) {
 .mapping-advanced { margin-top: var(--space-2); display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
 .advanced-toggle {
   display: inline-flex; align-items: center; gap: 4px;
+  padding: 0; border: none; background: none;
   font-size: var(--fs-xs); cursor: pointer; color: var(--primary); font-weight: 600;
   user-select: none;
 }

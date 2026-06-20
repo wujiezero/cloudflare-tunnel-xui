@@ -72,9 +72,14 @@
             <el-input v-model="sState.passwordForm.newPassword" type="password" show-password />
           </el-form-item>
           <el-form-item label="确认新密码">
-            <el-input v-model="sState.passwordForm.confirmPassword" type="password" show-password />
+            <el-input v-model="sState.passwordForm.confirmPassword" type="password" show-password @keyup.enter="handleChangePassword" />
+            <transition name="collapse-fade">
+              <span v-if="passwordMismatch" class="field-error">
+                <el-icon><WarningFilled /></el-icon>两次输入的新密码不一致
+              </span>
+            </transition>
           </el-form-item>
-          <el-button type="primary" @click="handleChangePassword" :loading="changingPassword" :icon="Refresh">修改密码</el-button>
+          <el-button type="primary" @click="handleChangePassword" :loading="changingPassword" :disabled="!canChangePassword" :icon="Refresh">修改密码</el-button>
         </el-form>
         <div v-if="sState.passwordResult" class="password-result">
           <el-icon><InfoFilled /></el-icon>{{ sState.passwordResult }}
@@ -85,7 +90,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from "vue";
+import { onMounted, ref, computed } from "vue";
 import { Key, Lock, MagicStick, Stamp, Refresh, InfoFilled, WarningFilled } from "@element-plus/icons-vue";
 import { useSettings } from "../composables/useSettings.js";
 import { useAuth } from "../composables/useAuth.js";
@@ -100,6 +105,16 @@ const { notify } = useApi();
 const saving = ref(false);
 const testing = ref(false);
 const changingPassword = ref(false);
+
+const passwordMismatch = computed(() =>
+  Boolean(sState.passwordForm.confirmPassword) &&
+  sState.passwordForm.newPassword !== sState.passwordForm.confirmPassword
+);
+const canChangePassword = computed(() =>
+  Boolean(sState.passwordForm.currentPassword) &&
+  Boolean(sState.passwordForm.newPassword) &&
+  !passwordMismatch.value
+);
 
 function capabilityLabel(key) {
   const labels = {
@@ -197,6 +212,11 @@ onMounted(loadSettings);
   border-radius: var(--radius-sm); background: var(--primary-soft);
   font-size: var(--fs-sm); color: var(--primary);
 }
+.field-error {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin-top: 6px; font-size: var(--fs-xs); font-weight: 600; color: var(--danger);
+}
+.field-error .el-icon { font-size: 14px; }
 .collapse-fade-enter-active, .collapse-fade-leave-active { transition: opacity 200ms ease, transform 200ms ease; }
 .collapse-fade-enter-from, .collapse-fade-leave-to { opacity: 0; transform: translateY(-6px); }
 @media (prefers-reduced-motion: reduce) {
