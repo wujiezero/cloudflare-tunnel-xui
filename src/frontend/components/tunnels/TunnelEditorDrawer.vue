@@ -163,7 +163,14 @@ const syncingDns = ref(false);
 const loadingTunnel = ref(false);
 const publishStatus = ref(null);
 
-const drawerSize = ref(typeof window !== "undefined" && window.innerWidth <= 720 ? "100%" : "62%");
+const windowWidth = ref(typeof window !== "undefined" ? window.innerWidth : 1280);
+const drawerSize = computed(() => {
+  const w = windowWidth.value;
+  if (w <= 720) return "100%";
+  if (w <= 1024) return "78%";
+  // Cap the width on large/ultrawide screens for a readable editing column.
+  return `${Math.min(Math.round(w * 0.6), 900)}px`;
+});
 const drawerTitle = computed(() => (tunnel.value?.name ? `编辑 Tunnel · ${tunnel.value.name}` : "编辑 Tunnel"));
 
 // Baseline snapshot of the last saved name + mappings, used to detect unsaved edits.
@@ -258,6 +265,10 @@ function handleBeforeUnload(event) {
   event.returnValue = "";
 }
 
+function handleResize() {
+  windowWidth.value = window.innerWidth;
+}
+
 watch(
   () => [props.modelValue, props.tunnelId],
   ([open, id], oldValue) => {
@@ -272,10 +283,12 @@ watch(
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeunload", handleBeforeUnload);
+  window.addEventListener("resize", handleResize);
 }
 onBeforeUnmount(() => {
   if (typeof window !== "undefined") {
     window.removeEventListener("beforeunload", handleBeforeUnload);
+    window.removeEventListener("resize", handleResize);
   }
 });
 
