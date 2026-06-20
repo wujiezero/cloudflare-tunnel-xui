@@ -11,6 +11,12 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 8866
+      http_proxy: ""
+      https_proxy: ""
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      no_proxy: ""
+      NO_PROXY: ""
     volumes:
       - ./config.json:/app/config.json
       - ./bin:/app/bin
