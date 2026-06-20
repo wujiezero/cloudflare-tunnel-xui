@@ -12,7 +12,7 @@
         <GlobalLoading />
         <router-view v-slot="{ Component, route: currentRoute }">
           <transition name="view-slide-fade" mode="out-in" appear>
-            <component :is="Component" :key="currentRoute.fullPath" />
+            <component v-if="Component" :is="Component" :key="currentRoute.fullPath" />
           </transition>
         </router-view>
       </div>
