@@ -323,3 +323,29 @@ test("tunnel editing happens in an in-context drawer instead of a separate page"
   assert.match(router, /path:\s*"\/tunnels\/:id\/edit"/);
   assert.match(router, /redirect:/);
 });
+
+test("dashboard tunnel loading handles missing Cloudflare credentials", () => {
+  const server = read("src/server.js");
+  const tunnels = read("src/frontend/composables/useTunnels.js");
+
+  assert.match(server, /hasCloudflareCredentials/);
+  assert.match(server, /configured:\s*false/);
+  assert.match(server, /请先在设置里填写 Cloudflare Account ID 和 API Token/);
+  assert.match(tunnels, /catch\s*\(error\)/);
+  assert.match(tunnels, /state\.tunnels\s*=\s*\[\]/);
+});
+
+test("Cloudflare credential test can fall back to real API capability checks", () => {
+  const cloudflare = read("src/cloudflare-service.js");
+
+  assert.match(cloudflare, /无法执行 Token 自检，将按实际接口能力判断/);
+  assert.match(cloudflare, /verifyResult\s*=\s*\{\s*status:\s*"unknown"\s*\}/);
+  assert.match(cloudflare, /verifyResult\.status\s*===\s*"unknown"/);
+});
+
+test("Docker build context excludes local secrets and runtime state", () => {
+  const dockerignore = read(".dockerignore");
+
+  assert.match(dockerignore, /^config\.json$/m);
+  assert.match(dockerignore, /^\.cloudflared$/m);
+});
