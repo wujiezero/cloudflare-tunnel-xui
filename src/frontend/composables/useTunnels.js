@@ -89,6 +89,9 @@ export function useTunnels() {
     try {
       const payload = await api("/api/tunnels");
       state.tunnels = (payload.items || []).map((item) => ensureTunnelUi(item));
+    } catch (error) {
+      state.tunnels = [];
+      notify(error.message || "Tunnel 列表加载失败", "error");
     } finally {
       state.tunnelsLoading = false;
     }

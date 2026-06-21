@@ -380,6 +380,10 @@ async function bootstrap() {
     };
   }
 
+  function hasCloudflareCredentials(credentials) {
+    return Boolean(credentials?.accountId && credentials?.apiToken);
+  }
+
   app.post("/api/auth/login", async (req, res) => {
     const throttle = getLoginThrottleState(req);
     if (throttle.blocked) {
@@ -509,6 +513,14 @@ async function bootstrap() {
   app.get("/api/tunnels", requireAuth, async (_req, res) => {
     try {
       const credentials = await getCloudflareCredentials();
+      if (!hasCloudflareCredentials(credentials)) {
+        return res.json({
+          items: [],
+          configured: false,
+          message: "请先在设置里填写 Cloudflare Account ID 和 API Token。"
+        });
+      }
+
       const tunnels = await listTunnels(credentials.accountId, credentials.apiToken);
       const tunnelDetails = await Promise.all(
         tunnels.map((tunnel) =>
