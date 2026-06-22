@@ -835,12 +835,20 @@ async function testCloudflareCredentials({ accountId, apiToken }) {
     }
   };
 
-  const verification = await verifyApiToken(apiToken);
-  const verifyResult = verification.result || {};
+  let verifyResult = {};
   let readableZones = [];
 
-  if (verifyResult.status !== "active") {
-    issues.push(`API Token status is ${verifyResult.status || "unknown"}.`);
+  try {
+    const verification = await verifyApiToken(apiToken);
+    verifyResult = verification.result || {};
+    if (verifyResult.status !== "active") {
+      issues.push(`API Token status is ${verifyResult.status || "unknown"}.`);
+    }
+  } catch (error) {
+    verifyResult = { status: "unknown" };
+    issues.push(
+      `无法执行 Token 自检，将按实际接口能力判断：${error.message}`
+    );
   }
 
   try {
@@ -874,6 +882,9 @@ async function testCloudflareCredentials({ accountId, apiToken }) {
   }
 
   try {
+    if (!verifyResult.id) {
+      throw new Error("Token 自检没有返回可读取的 Token ID。");
+    }
     const tokenDetails = await getApiTokenDetails(apiToken, verifyResult.id);
     permissions.inspectable = true;
     permissions.granted = extractPermissionNames(tokenDetails);
@@ -957,7 +968,7 @@ async function testCloudflareCredentials({ accountId, apiToken }) {
     // "valid" should reflect real functional readiness.
     // When API Tokens Read is missing, we may not be able to list granted/missing permission names,
     // but Tunnel/DNS capabilities can still be verified via real API calls.
-    valid: verifyResult.status === "active" && readyForTunnelManagement && readyForDnsPublish,
+    valid: (verifyResult.status === "active" || verifyResult.status === "unknown") && readyForTunnelManagement && readyForDnsPublish,
     message,
     tokenId: verifyResult.id || "",
     tokenStatus: verifyResult.status || "",
