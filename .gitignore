@@ -1,5 +1,7 @@
 node_modules/
 .DS_Store
+.idea/
+.nezha/
 .cloudflared.pid
 .cloudflared.log
 .cloudflared.token
