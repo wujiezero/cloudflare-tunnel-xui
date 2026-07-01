@@ -113,6 +113,13 @@ export function getMappingsSignature(mappings) {
   return JSON.stringify(normalizeMappings(mappings));
 }
 
+export function getDomainChips(domains, maxShown, expanded) {
+  const list = (domains || []).filter(Boolean);
+  const shown = expanded ? list : list.slice(0, maxShown);
+  const hasMore = list.length > maxShown;
+  return { shown, hasMore, label: expanded ? "收起" : `+${list.length - maxShown} 个` };
+}
+
 export function mergeLineSnapshots(prev, next, maxLines = 1000) {
   if (!prev.length || !next.length) return next;
   const maxOverlap = Math.min(prev.length, next.length);

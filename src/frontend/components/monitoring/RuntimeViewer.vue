@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="visible" title="运行时监控" width="800px" destroy-on-close class="glass-dialog runtime-dialog">
+  <el-dialog v-model="visible" title="运行时监控" width="800px" destroy-on-close class="panel-dialog runtime-dialog">
     <template v-if="cfState.selectedRuntimeTunnelId">
       <!-- Process selection tabs -->
       <div class="process-tabs">
@@ -11,7 +11,7 @@
           :class="{ active: p.tunnelId === cfState.selectedRuntimeTunnelId }"
           @click="selectProcess(p.tunnelId)"
         >
-          <span class="process-led" :class="p.running ? 'online' : 'offline'"></span>
+          <span class="status-dot" :class="p.running ? 'ok' : 'idle'"></span>
           {{ p.name || p.tunnelId?.slice(0, 8) }}
         </button>
       </div>
@@ -67,28 +67,29 @@
       </div>
 
       <!-- Content area -->
-      <div v-if="cfState.runtimeViewerMode === 'logs'" class="runtime-textarea-wrapper">
-        <textarea
-          ref="logTextareaRef"
-          :value="cfState.runtimeLogDisplay"
-          readonly
-          class="runtime-textarea runtime-log-textarea"
-          @scroll="handleLogScroll"
-        ></textarea>
+      <div v-if="cfState.runtimeViewerMode === 'logs'" class="log-viewer scroll-thin" ref="logViewerRef" @scroll="handleLogScroll">
+        <template v-if="cfState.runtimeLogLines.length">
+          <div v-for="(line, i) in parsedLogLines" :key="i" class="log-line">
+            <span v-if="line.time" class="log-time">{{ line.time }}</span>
+            <span class="log-level" :class="line.level.toLowerCase()">{{ line.level }}</span>
+            <span class="log-text">{{ line.text }}</span>
+          </div>
+        </template>
+        <div v-else class="log-fallback">{{ cfState.runtimeLogDisplay }}</div>
       </div>
 
       <div v-else class="metrics-grid">
         <div class="metric-card" v-for="m in metricsCards" :key="m.label">
           <span class="metric-icon"><el-icon><component :is="m.icon" /></el-icon></span>
-          <div class="metric-value">{{ m.value }}</div>
+          <div class="metric-value mono">{{ m.value }}</div>
           <div class="metric-label">{{ m.label }}</div>
         </div>
         <div class="metric-chart-section" v-if="cfState.runtimeMetricsHistory.length > 1">
           <h4 class="metric-chart-title"><el-icon><Share /></el-icon>活动连接</h4>
-          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="activeConnections" label="连接数" color="#2a6df6" />
+          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="activeConnections" label="连接数" color="--accent" />
           <h4 class="metric-chart-title"><el-icon><Upload /></el-icon>流量</h4>
-          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesUp" label="上行(B)" color="#1a9960" />
-          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesDown" label="下行(B)" color="#c97f1a" />
+          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesUp" label="上行(B)" color="--success" />
+          <MetricsChart :history="cfState.runtimeMetricsHistory" data-key="bytesDown" label="下行(B)" color="--warning" />
         </div>
       </div>
     </template>
@@ -116,7 +117,6 @@ import { Refresh, Delete, VideoPause, Document, TrendCharts, Share, Upload } fro
 import { useCloudflared } from "../../composables/useCloudflared.js";
 import { useApi } from "../../composables/useApi.js";
 import MetricsChart from "./MetricsChart.vue";
-import { parseMetricsText, formatJson } from "../../utils/formatters.js";
 
 const METRICS_REFRESH_OPTIONS = [
   { value: 0, label: "手动" },
@@ -156,13 +156,26 @@ const metricsRefreshTimer = ref(null);
 const logRefreshInterval = ref(5000);
 const logRefreshTimer = ref(null);
 const logAutoScroll = ref(true);
-const logTextareaRef = ref(null);
+const logViewerRef = ref(null);
 const selectedMetricsRefreshLabel = computed(() => (
   METRICS_REFRESH_OPTIONS.find((option) => option.value === metricsRefreshInterval.value)?.label || "手动"
 ));
 const selectedLogRefreshLabel = computed(() => (
   LOG_REFRESH_OPTIONS.find((option) => option.value === logRefreshInterval.value)?.label || "手动"
 ));
+
+const LOG_LINE_RE = /^(\S+)\s+(INF|WRN|ERR|DBG|WARN|ERROR|INFO|DEBUG)\s+(.*)$/;
+function parseLogLine(line) {
+  const m = LOG_LINE_RE.exec(line);
+  if (!m) return { time: "", level: "INF", text: line };
+  const raw = m[2].toUpperCase();
+  let level = "INF";
+  if (raw.startsWith("W")) level = "WRN";
+  else if (raw.startsWith("E")) level = "ERR";
+  else if (raw.startsWith("D")) level = "DBG";
+  return { time: m[1], level, text: m[3] };
+}
+const parsedLogLines = computed(() => cfState.runtimeLogLines.map(parseLogLine));
 
 const METRIC_META = [
   { key: "activeConnections", label: "活动连接", icon: "Share" },
@@ -182,13 +195,6 @@ const metricsCards = computed(() => {
   }));
 });
 
-const metricsHistoryPreview = computed(() => {
-  return cfState.runtimeMetricsHistory.map((h) => {
-    const p = h.parsed;
-    return `${new Date(h.time).toLocaleTimeString()} | 连接:${p.activeConnections} 上行:${p.bytesUp}`;
-  }).join("\n");
-});
-
 function selectProcess(tunnelId) {
   cfState.selectedRuntimeTunnelId = tunnelId;
   cfState.runtimeViewerTunnelId = tunnelId;
@@ -201,7 +207,8 @@ async function handleStop() {
     await ElMessageBox.confirm("将停止当前 Tunnel 的本机 cloudflared 进程。", "确认停止 Tunnel", {
       confirmButtonText: "确认停止",
       cancelButtonText: "取消",
-      type: "warning"
+      type: "warning",
+      customClass: "panel-confirm"
     });
   } catch (_) {
     return;
@@ -288,15 +295,15 @@ function handleLogRefreshIntervalChange() {
 async function scrollLogToBottom() {
   if (!logAutoScroll.value || cfState.runtimeViewerMode !== "logs") return;
   await nextTick();
-  const textarea = logTextareaRef.value;
-  if (!textarea) return;
-  textarea.scrollTop = textarea.scrollHeight;
+  const el = logViewerRef.value;
+  if (!el) return;
+  el.scrollTop = el.scrollHeight;
 }
 
 function handleLogScroll() {
-  const textarea = logTextareaRef.value;
-  if (!textarea || !logAutoScroll.value) return;
-  const distanceToBottom = textarea.scrollHeight - textarea.scrollTop - textarea.clientHeight;
+  const el = logViewerRef.value;
+  if (!el || !logAutoScroll.value) return;
+  const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
   if (distanceToBottom > 48) {
     logAutoScroll.value = false;
   }
@@ -352,64 +359,46 @@ onBeforeUnmount(() => {
   display: inline-flex; align-items: center; gap: 6px;
   height: 30px; padding: 0 var(--space-3);
   border-radius: var(--radius-pill);
-  border: 1px solid var(--line-strong);
-  background: var(--panel-soft);
-  color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  background: var(--card-2);
+  color: var(--text-2);
   font-size: var(--fs-xs); font-weight: 600;
   cursor: pointer;
   transition: all var(--motion-fast) var(--motion-ease);
 }
-.process-tab:hover { border-color: var(--primary-ring); color: var(--primary); }
-.process-tab.active { background: var(--primary); border-color: var(--primary); color: #fff; box-shadow: var(--shadow-primary); }
-.process-led { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.process-led.online { background: var(--success); }
-.process-led.offline { background: var(--text-faint); }
-.process-tab.active .process-led.online { background: #fff; }
-.process-tab.active .process-led.offline { background: rgba(255,255,255,0.6); }
+.process-tab:hover { border-color: var(--accent); color: var(--accent); }
+.process-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.process-tab.active .status-dot.ok { background: #fff; }
+.process-tab.active .status-dot.idle { background: rgba(255,255,255,0.6); }
 
 .viewer-controls {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
   margin-bottom: var(--space-3); flex-wrap: wrap;
 }
 .viewer-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; justify-content: flex-end; align-items: center; }
-.el-radio-button__inner { display: inline-flex; align-items: center; gap: 4px; }
-.runtime-refresh-select {
-  width: 98px;
-}
-.runtime-log-autoscroll {
-  min-height: 24px;
-}
-.runtime-textarea-wrapper {
+.runtime-refresh-select { width: 98px; }
+.runtime-log-autoscroll { min-height: 24px; }
+
+.log-viewer {
   max-height: 400px;
+  min-height: 320px;
   overflow-y: auto;
-}
-.runtime-log-textarea {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 400px;
-  resize: vertical;
-  border: 1px solid rgba(92, 126, 178, 0.28);
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-family: "Fira Code", "Menlo", monospace;
+  background: #05070a;
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 1.6;
-  background: rgba(0,0,0,0.15);
-  color: #e0e0e0;
-  outline: none;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(92, 126, 178, 0.20) transparent;
+  line-height: 1.7;
 }
-.runtime-log-textarea::-webkit-scrollbar {
-  width: 8px;
-}
-.runtime-log-textarea::-webkit-scrollbar-track {
-  background: transparent;
-}
-.runtime-log-textarea::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(92, 126, 178, 0.22);
-}
+.log-line { display: flex; gap: 10px; color: #8892a0; white-space: nowrap; }
+.log-time { flex-shrink: 0; color: #5b6472; }
+.log-level { flex-shrink: 0; font-weight: 600; }
+.log-level.inf { color: #4f9bff; }
+.log-level.wrn { color: #e0b23e; }
+.log-level.err { color: #e5676a; }
+.log-level.dbg { color: #8892a0; }
+.log-text { white-space: normal; color: #c4cad4; }
+.log-fallback { color: #8892a0; font-size: 13px; white-space: pre-wrap; }
 
 .metrics-grid {
   display: grid;
@@ -421,26 +410,26 @@ onBeforeUnmount(() => {
   padding: var(--space-4);
   text-align: center;
   border-radius: var(--radius-md);
-  background: var(--panel-soft);
-  border: 1px solid var(--line);
+  background: var(--card-2);
+  border: 1px solid var(--border);
 }
 .metric-icon {
   display: inline-grid; place-items: center;
   width: 32px; height: 32px; margin-bottom: var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--primary-soft); color: var(--primary); font-size: 16px;
+  background: var(--accent-soft); color: var(--accent); font-size: 16px;
 }
-.metric-value { font-size: var(--fs-xl); font-weight: 800; color: var(--text); line-height: 1.1; word-break: break-word; }
-.metric-label { font-size: var(--fs-xs); color: var(--text-secondary); margin-top: 4px; font-weight: 600; }
+.metric-value { font-size: var(--fs-xl); font-weight: 700; color: var(--text); line-height: 1.1; word-break: break-word; }
+.metric-label { font-size: var(--fs-xs); color: var(--text-2); margin-top: 4px; font-weight: 600; }
 .metric-chart-section {
   grid-column: 1 / -1;
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--panel-soft);
-  border: 1px solid var(--line);
+  background: var(--card-2);
+  border: 1px solid var(--border);
 }
 .metric-chart-title { display: flex; align-items: center; gap: 6px; margin: 0 0 var(--space-2); font-size: var(--fs-sm); font-weight: 700; }
-.metric-chart-title .el-icon { color: var(--primary); }
+.metric-chart-title .el-icon { color: var(--accent); }
 .metric-chart-title:not(:first-child) { margin-top: var(--space-4); }
 .runtime-dialog-footer {
   display: flex;
@@ -454,18 +443,12 @@ onBeforeUnmount(() => {
   flex: 0 1 auto;
   min-width: 0;
   font-size: 12px;
-  color: var(--text-secondary, #999);
+  color: var(--text-2);
   white-space: nowrap;
 }
-.runtime-close-button {
-  flex: 0 0 auto;
-}
+.runtime-close-button { flex: 0 0 auto; }
 @media (max-width: 520px) {
-  .runtime-dialog-footer {
-    justify-content: space-between;
-  }
-  .auto-refresh-label {
-    white-space: normal;
-  }
+  .runtime-dialog-footer { justify-content: space-between; }
+  .auto-refresh-label { white-space: normal; }
 }
 </style>

@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import { ElMessage } from "element-plus";
+import { useToast } from "./useToast.js";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const csrfState = reactive({ token: "", priming: null });
@@ -66,7 +66,8 @@ export function useApi() {
   }
 
   function notify(message, type = "success") {
-    ElMessage({ message, type, grouping: true });
+    const { pushToast } = useToast();
+    pushToast(message, type === "error" ? "danger" : type);
   }
 
   return { api, notify, csrfToken: csrfState };

@@ -170,7 +170,8 @@ export function useCloudflared() {
           await ElMessageBox.confirm(error.message, "确认接管 Tunnel", {
             confirmButtonText: "确认接管",
             cancelButtonText: "取消",
-            type: "warning"
+            type: "warning",
+            customClass: "panel-confirm"
           });
           await startTunnel(tunnelId, { force: true });
         } catch (_) { /* user cancelled */ }

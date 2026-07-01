@@ -23,10 +23,15 @@ export function useTheme() {
     applyTheme(state.darkMode);
   }
 
+  function setDarkMode(dark) {
+    state.darkMode = dark;
+    applyTheme(state.darkMode);
+  }
+
   // Auto-init on first import
   if (typeof window !== "undefined") {
     initTheme();
   }
 
-  return { state, toggleDarkMode, initTheme };
+  return { state, toggleDarkMode, setDarkMode, initTheme };
 }

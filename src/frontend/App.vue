@@ -1,12 +1,14 @@
 <template>
   <LoginView v-if="!authenticated" @login-success="onLoginSuccess" />
   <AppLayout v-else />
+  <ToastStack />
 </template>
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, watch } from "vue";
 import LoginView from "./views/LoginView.vue";
 import AppLayout from "./components/layout/AppLayout.vue";
+import ToastStack from "./components/common/ToastStack.vue";
 import { useAuth } from "./composables/useAuth.js";
 import { useCloudflared } from "./composables/useCloudflared.js";
 import { useTheme } from "./composables/useTheme.js";
@@ -76,6 +78,6 @@ html, body, #app {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: "Fira Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-ui);
 }
 </style>

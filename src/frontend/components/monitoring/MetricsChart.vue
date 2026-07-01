@@ -7,6 +7,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch } from "vue";
 import { Chart, registerables } from "chart.js";
+import { useTheme } from "../../composables/useTheme.js";
 
 Chart.register(...registerables);
 
@@ -14,11 +15,25 @@ const props = defineProps({
   history: { type: Array, default: () => [] },
   dataKey: { type: String, default: "activeConnections" },
   label: { type: String, default: "" },
-  color: { type: String, default: "#2a6df6" }
+  // Name of a CSS custom property (e.g. "--accent"); a "-soft" variant of the
+  // same token is used for the fill when present.
+  color: { type: String, default: "--accent" }
 });
 
+const { state: themeState } = useTheme();
 const canvasRef = ref(null);
 let chartInstance = null;
+
+function resolveToken(name) {
+  if (typeof window === "undefined") return "";
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function resolveColors() {
+  const solid = resolveToken(props.color) || "#2a6df6";
+  const soft = resolveToken(`${props.color}-soft`) || solid;
+  return { solid, soft };
+}
 
 function buildChartData(history) {
   const labels = history.map((h) => {
@@ -46,6 +61,7 @@ function parseMetricNumber(value) {
 function renderChart() {
   if (!canvasRef.value || !props.history?.length) return;
   const { labels, values } = buildChartData(props.history);
+  const { solid, soft } = resolveColors();
   if (chartInstance) chartInstance.destroy();
 
   chartInstance = new Chart(canvasRef.value, {
@@ -55,8 +71,8 @@ function renderChart() {
       datasets: [{
         label: props.label,
         data: values,
-        borderColor: props.color,
-        backgroundColor: props.color + "20",
+        borderColor: solid,
+        backgroundColor: soft,
         fill: true,
         tension: 0.3,
         pointRadius: 2,
@@ -70,13 +86,14 @@ function renderChart() {
       plugins: { legend: { display: !!props.label } },
       scales: {
         x: { ticks: { maxTicksLimit: 8, font: { size: 10 } }, grid: { display: false } },
-        y: { beginAtZero: true, ticks: { font: { size: 10 } }, grid: { color: "rgba(255,255,255,0.05)" } }
+        y: { beginAtZero: true, ticks: { font: { size: 10 } }, grid: { color: resolveToken("--border") || "rgba(255,255,255,0.05)" } }
       }
     }
   });
 }
 
 watch(() => props.history, renderChart, { deep: true });
+watch(() => themeState.darkMode, renderChart);
 onMounted(renderChart);
 onBeforeUnmount(() => { if (chartInstance) chartInstance.destroy(); });
 </script>

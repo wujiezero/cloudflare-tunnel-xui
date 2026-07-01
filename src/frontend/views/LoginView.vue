@@ -1,7 +1,7 @@
 <template>
   <div class="login-page">
-    <div class="login-glass surface-card" v-loading="loading">
-      <div class="login-brand">CF</div>
+    <div class="login-card surface-card" v-loading="loading">
+      <BrandMark :size="66" :radius="18" class="login-brand" />
       <h1>Cloudflare Tunnel XUI</h1>
       <p class="login-subtitle">管理控制台</p>
       <el-form @submit.prevent="handleLogin" label-position="top">
@@ -35,6 +35,7 @@ import { ref } from "vue";
 import { User, Lock, Right, Connection, TrendCharts } from "@element-plus/icons-vue";
 import { useApi } from "../composables/useApi.js";
 import { useAuth } from "../composables/useAuth.js";
+import BrandMark from "../components/common/BrandMark.vue";
 
 const emit = defineEmits(["login-success"]);
 const { notify } = useApi();
@@ -62,30 +63,19 @@ async function handleLogin() {
   justify-content: center;
   min-height: 100vh;
   padding: var(--space-6);
+  background: var(--bg);
 }
-.login-glass {
+.login-card {
   width: 100%;
   max-width: 420px;
   padding: var(--space-8);
   border-radius: var(--radius-xl);
-  backdrop-filter: var(--blur-heavy);
-  -webkit-backdrop-filter: var(--blur-heavy);
-  box-shadow: var(--shadow), var(--inset-highlight), var(--inset-depth);
-  animation: login-enter 320ms var(--ease-out);
+  box-shadow: var(--shadow-modal);
+  animation: login-enter 320ms ease;
 }
-.login-brand {
-  position: relative;
-  width: 66px; height: 66px;
-  margin: 0 auto var(--space-4);
-  /* Cloudflare orange reserved for the logo */
-  background: linear-gradient(135deg, var(--brand-orange), var(--brand-orange-2));
-  border-radius: var(--radius-lg);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 26px; font-weight: 800; color: #fff;
-  box-shadow: 0 12px 28px rgba(243, 128, 32, 0.36), inset 0 1px 0 rgba(255,255,255,0.3);
-}
+.login-brand { margin: 0 auto var(--space-4); }
 h1 { text-align: center; margin: 0 0 4px; font-size: var(--fs-lg); font-weight: 700; }
-.login-subtitle { text-align: center; color: var(--text-secondary); margin: 0 0 var(--space-6); font-size: var(--fs-base); }
+.login-subtitle { text-align: center; color: var(--text-2); margin: 0 0 var(--space-6); font-size: var(--fs-base); }
 .login-btn { width: 100%; }
 .login-features {
   display: flex;
@@ -93,18 +83,18 @@ h1 { text-align: center; margin: 0 0 4px; font-size: var(--fs-lg); font-weight: 
   gap: var(--space-4);
   margin-top: var(--space-6);
   padding-top: var(--space-5);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--border);
   font-size: var(--fs-xs);
-  color: var(--text-secondary);
+  color: var(--text-2);
   flex-wrap: wrap;
 }
 .login-features span { display: inline-flex; align-items: center; gap: 5px; }
-.login-features .el-icon { color: var(--primary); font-size: 14px; }
+.login-features .el-icon { color: var(--accent); font-size: 14px; }
 @keyframes login-enter {
   from { opacity: 0; transform: translateY(12px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .login-glass { animation: none; }
+  .login-card { animation: none; }
 }
 </style>

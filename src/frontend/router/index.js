@@ -15,10 +15,10 @@ const routes = [
     component: () => import("../views/TunnelListView.vue")
   },
   {
+    // Creating now happens in an in-context modal on the tunnel list.
+    // Keep the legacy path working by redirecting to the list with ?create=1.
     path: "/tunnels/create",
-    name: "tunnels-create",
-    meta: { title: "新建 Tunnel", subtitle: "为账户创建一个新的命名 Tunnel" },
-    component: () => import("../views/TunnelCreateView.vue")
+    redirect: { path: "/tunnels", query: { create: "1" } }
   },
   {
     // Editing now happens in an in-context drawer on the tunnel list.

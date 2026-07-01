@@ -6,6 +6,7 @@ const state = reactive({
   tunnels: [],
   tunnelsLoading: false,
   tunnelSearch: "",
+  tunnelStatusFilter: "all",
   tunnelSort: "name",
   tunnelSortOrder: "asc",
   tunnelSelection: [],
@@ -25,6 +26,13 @@ const filteredTunnels = computed(() => {
     });
   }
 
+  // Status filter
+  if (state.tunnelStatusFilter === "online") {
+    list = list.filter((t) => t.status === "healthy");
+  } else if (state.tunnelStatusFilter === "offline") {
+    list = list.filter((t) => t.status !== "healthy");
+  }
+
   // Sort
   const field = state.tunnelSort;
   const dir = state.tunnelSortOrder === "asc" ? 1 : -1;
@@ -33,6 +41,9 @@ const filteredTunnels = computed(() => {
     if (field === "name") {
       va = (a.name || "").toLowerCase();
       vb = (b.name || "").toLowerCase();
+    } else if (field === "status") {
+      va = a.status === "healthy" ? 1 : 0;
+      vb = b.status === "healthy" ? 1 : 0;
     } else if (field === "connections") {
       va = Number(a.connections || 0);
       vb = Number(b.connections || 0);
